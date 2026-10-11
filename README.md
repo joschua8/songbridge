@@ -17,7 +17,7 @@ und macht aus dem Ablaufplan eines Gottesdienstes mit einem Klick eine fertige P
 |---|---|
 | **Ablaufplan → Playlist** | Termin in ChurchTools wählen → Ablaufplan ansehen → `.proPlaylist` herunterladen. Überschriften und Ablaufpunkte werden farbige Kopfzeilen, Lieder verweisen auf die vorhandenen Präsentationen in deiner ProPresenter-Bibliothek. |
 | **Automatische Einträge** | Unter „Vaterunser“ kommt die Vaterunser-Präsentation (per CCLI-Nummer gefunden), unter jedem Punkt mit „Stille“ ein zufälliges Bild aus deinem Stille-Ordner. |
-| **Dateien am Termin** | PowerPoint, PDF, Bilder, Videos und Audio aus dem Reiter „Dateien“ des Termins werden geladen und unter dem passenden Ablaufpunkt eingefügt (z. B. „Predigt …pptx“ unter „Predigt“). PowerPoint/PDF werden dafür in Folienbilder umgewandelt. |
+| **Dateien am Termin** | PowerPoint, Keynote, Bilder, Videos und Audio aus dem Reiter „Dateien“ des Termins werden geladen und unter dem passenden Ablaufpunkt eingefügt (z. B. „Predigt …pptx“ unter „Predigt“). Präsentationen werden dafür in Folienbilder umgewandelt. PDFs, Word-Dateien usw. werden nicht geladen, sondern nur als Hinweis über dem Ablauf genannt. |
 | **Liedzuordnung** | ChurchTools-Liedname ↔ Präsentation: exakt, ohne Satzzeichen/CCLI-Nummer, zweisprachige Titel, ähnliche Namen („bitte prüfen“). Jede Zuordnung lässt sich in der Oberfläche ändern. |
 | **Lieder-Import** | Alle SongBeamer-Dateien (`.sng`) aus ChurchTools in eine lokale Liederdatenbank laden; bei jedem weiteren Import nur neue und geänderte. |
 | **Lieder hochladen** | Lieder ohne `.sng` als CCLI-SongSelect-Datei (`.usr`/`.txt`) oder `.sng` per Drag & Drop hinzufügen. |
@@ -43,7 +43,7 @@ und macht aus dem Ablaufplan eines Gottesdienstes mit einem Klick eine fertige P
    wenn man es schließt, wird das Programm beendet.
 
 Für PowerPoint-Dateien im Ablaufplan braucht es [LibreOffice](https://www.libreoffice.org) (kostenlos) oder –
-nur unter Windows – ein installiertes Microsoft PowerPoint. PDF, Bilder, Videos und Audio gehen ohne.
+nur unter Windows – ein installiertes Microsoft PowerPoint. Bilder, Videos und Audio gehen ohne.
 
 ## Bedienung
 

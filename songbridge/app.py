@@ -662,7 +662,7 @@ def put_playlist_settings():
 def _media_files(row: dict, settings: playlist.PlaylistSettings, tmp: Path) -> list[Path]:
     """Dateien einer Medien-Zeile: Stille-Bilder aus dem Ordner bzw. Datei vom Termin (aus ChurchTools geladen).
 
-    PowerPoint/PDF wird in eine Folge von JPEGs umgewandelt (playlist.slides_to_images).
+    PowerPoint/Keynote wird in eine Folge von JPEGs umgewandelt (playlist.slides_to_images).
     """
     media = row.get("media") or {}
     if media.get("source") == "silence":
@@ -679,7 +679,7 @@ def _media_files(row: dict, settings: playlist.PlaylistSettings, tmp: Path) -> l
         url, filename = client.file_meta(str(media.get("fileId")), str(media.get("name") or ""))
     except (dl.ChurchToolsError, requests.RequestException) as exc:
         raise RuntimeError(f"Datei nicht abrufbar ({exc})") from exc
-    # Typ erst am echten Dateinamen prüfen, dann laden – .docx & Co. werden gar nicht heruntergeladen.
+    # Typ erst am echten Dateinamen prüfen, dann laden – .docx, .pdf & Co. werden gar nicht heruntergeladen.
     name = Path(filename or str(media.get("name") or "Datei")).name
     kind = playlist.media_kind(name)
     if not kind:

@@ -1575,7 +1575,7 @@ function renderPlan() {
     if (r.type === "media") {
       const md = r.media || {};
       const what = md.source === "silence" ? `ein zufälliges von ${md.count || 0} ${md.count === 1 ? "Bild" : "Bildern"} aus dem Stille-Ordner`
-        : md.kind === "slides" ? (/\.pdf$/i.test(md.name || "") ? "PDF → Bilder" : "Präsentation → Bilder")
+        : md.kind === "slides" ? "Präsentation → Bilder"
         : {image: "Bild", video: "Video", audio: "Audio"}[md.kind] || "Datei";
       body = `<div class="ttl"><span>${md.source === "silence" ? "◐" : "📎"} ${esc(r.title)}</span>${auto}</div>
         <div class="sub">${esc(what)}${md.source === "ct" ? " · aus ChurchTools" : ""}</div>
