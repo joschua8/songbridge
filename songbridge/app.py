@@ -3,7 +3,8 @@
 
 Start:  .venv/bin/python -m songbridge   ->  http://127.0.0.1:5005
 
-  * Lieder: alle .sng-Lieder im Ordner songs/ durchsuchen, SongSelect-Dateien (.usr/.txt) hochladen
+  * Lieder: alle .sng-Lieder im Ordner songs/ durchsuchen, SongSelect-Dateien (.usr/.txt) hochladen,
+    Lieder als Freitext erfassen und alle Lieder als Freitext bearbeiten (sng.parse_freetext)
   * ChurchTools: Ablaufpläne ansehen und als ProPresenter-Playlist (.proPlaylist) exportieren;
     Lieder-Import mit Abgleich (nur neue/geänderte Lieder werden geladen, churchtools.py)
   * ProPresenter: Abgleich Liederdatenbank <-> Lieder-Bibliothek (propresenter/sync.py), Export als .pro
@@ -19,6 +20,7 @@ import tempfile
 import json
 import os
 import random
+import shutil
 import sys
 import threading
 import time
@@ -38,12 +40,17 @@ from songbridge.propresenter import playlist
 from songbridge.propresenter import sync as pp_sync
 from songbridge.songs import songselect
 from songbridge.songs.sng import (
+    EDITED_KEY,
     Song,
     build_sng,
+    freetext_hints,
+    is_edited_file,
     is_manual_file,
     norm_title,
+    parse_freetext,
     parse_sng,
     read_sng,
+    song_to_freetext,
 )
 
 BASE_DIR = paths.RES_DIR
@@ -51,6 +58,8 @@ SONGS_DIR = Path(os.environ.get("SONGS_DIR", paths.DATA_DIR / "songs")).resolve(
 REPORT_NAME = "fehlende_sng.csv"
 APP_SETTINGS_PATH = Path(os.environ.get("APP_SETTINGS", paths.DATA_DIR / "app_settings.json"))
 BACKUP_DIR = Path(os.environ.get("PP_BACKUP_DIR", paths.DATA_DIR / "backup"))
+# Originalfassung bearbeiteter ChurchTools-Lieder (für „Original wiederherstellen“), gleicher relativer Pfad wie in songs/.
+ORIGINALS_DIR = paths.DATA_DIR / "backup" / "originale"
 
 app = Flask(__name__, static_folder=None)
 
@@ -75,6 +84,8 @@ def song_json(path: Path, song: Song, with_text: bool = True, index: dict | None
         "ccli": song.ccli,
         "copyright": song.copyright,
         "manual": song.manual,
+        "edited": EDITED_KEY in song.headers,
+        "hasOriginal": (ORIGINALS_DIR / path.relative_to(SONGS_DIR)).exists(),
         "langCount": song.lang_count,
         "folder": path.parent.relative_to(SONGS_DIR).as_posix() if path.parent != SONGS_DIR else "",
         "modified": path.stat().st_mtime,
@@ -133,7 +144,7 @@ def get_song(song_id: str):
     if not path.exists():
         return error("Lied nicht gefunden", 404)
     song = read_sng(path)
-    return jsonify(song_json(path, song))
+    return jsonify({**song_json(path, song), "freetext": song_to_freetext(song)})
 
 
 def _write_song(song: Song, target: Path) -> None:
@@ -175,13 +186,101 @@ def upload_songs():
     return jsonify({"results": results})
 
 
+def _freetext_song(data: dict) -> tuple[Song, list[str]]:
+    """Formular „Freitext“ -> (Lied, Hinweise). Abschnitte/Reihenfolge wie sng.parse_freetext."""
+    sections, order, warnings = parse_freetext(str(data.get("text") or ""))
+    song = Song(
+        title=" ".join(str(data.get("title") or "").split()),
+        author=" ".join(str(data.get("author") or "").split()),
+        ccli=str(data.get("ccli") or "").strip(),
+        copyright=" ".join(str(data.get("copyright") or "").split()),
+        sections=sections,
+        order=order,
+    )
+    return song, warnings + freetext_hints(sections)
+
+
+@app.post("/api/songs/freetext/preview")
+def freetext_preview():
+    """Erkannte Abschnitte in Reihenfolge (mit Wiederholungen) + Hinweise, für die Live-Vorschau."""
+    song, warnings = _freetext_song(request.get_json(silent=True) or {})
+    by_label = {s.label: s for s in song.sections}
+    return jsonify({"sections": [{"label": l, "lines": by_label[l].lines} for l in song.order if l in by_label],
+                    "warnings": warnings})
+
+
+@app.post("/api/songs/freetext")
+def freetext_create():
+    song, warnings = _freetext_song(request.get_json(silent=True) or {})
+    if not song.title:
+        return error("Bitte einen Titel angeben.")
+    if not any(s.lines for s in song.sections):
+        return error("Bitte den Liedtext eingeben.")
+    if song.ccli and not song.ccli.isdigit():
+        return error("Die CCLI-Liednummer besteht nur aus Ziffern.")
+    target = SONGS_DIR / f"{dl.safe_filename(song.title)}.sng"
+    if target.exists():
+        return error(f"Es gibt bereits ein Lied „{target.stem}“. Bitte den Titel anpassen.", 409)
+    _write_song(song, target)
+    return jsonify({"id": target.relative_to(SONGS_DIR).as_posix(), "title": song.title, "warnings": warnings}), 201
+
+
+@app.put("/api/songs/<path:song_id>")
+def update_song(song_id: str):
+    """Lied als Freitext bearbeiten – egal ob aus ChurchTools, SongSelect oder Freitext.
+
+    Kopfzeilen (Editor, LangCount, #BackgroundImage …) bleiben. ChurchTools-Lieder behalten ihren Dateinamen
+    (Zuordnung im Import-Index), bekommen #SongBridgeEdited und das Original wird einmalig gesichert;
+    eigene Lieder werden bei geändertem Titel umbenannt.
+    """
+    path = song_path(song_id)
+    if not path.exists():
+        return error("Lied nicht gefunden", 404)
+    old = read_sng(path)
+    song, warnings = _freetext_song(request.get_json(silent=True) or {})
+    if not song.title:
+        return error("Bitte einen Titel angeben.")
+    if not any(s.lines for s in song.sections):
+        return error("Bitte den Liedtext eingeben.")
+    if song.ccli and not song.ccli.isdigit():
+        return error("Die CCLI-Liednummer besteht nur aus Ziffern.")
+    song.headers, song.editor, song.lang_count = dict(old.headers), old.editor, old.lang_count
+    target = path
+    if old.manual:
+        target = path.parent / f"{dl.safe_filename(song.title)}.sng"
+        if target != path and target.exists() and target.name.casefold() != path.name.casefold():
+            return error(f"Es gibt bereits ein Lied „{target.stem}“. Bitte den Titel anpassen.", 409)
+    else:
+        backup = ORIGINALS_DIR / path.relative_to(SONGS_DIR)
+        if not backup.exists() and not is_edited_file(path):
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, backup)
+        song.headers[EDITED_KEY] = date.today().isoformat()
+    _write_song(song, target)
+    if target != path and path.exists() and target.name.casefold() != path.name.casefold():
+        path.unlink()
+    return jsonify({"id": target.relative_to(SONGS_DIR).as_posix(), "title": song.title, "warnings": warnings})
+
+
+@app.post("/api/songs/<path:song_id>/restore")
+def restore_song(song_id: str):
+    """Bearbeitetes ChurchTools-Lied auf die gesicherte Originalfassung zurücksetzen."""
+    path = song_path(song_id)
+    backup = ORIGINALS_DIR / path.relative_to(SONGS_DIR)
+    if not backup.exists():
+        return error("Keine gesicherte Originalfassung vorhanden.", 404)
+    shutil.copy2(backup, path)
+    backup.unlink()
+    return jsonify({"id": song_id})
+
+
 @app.delete("/api/songs/<path:song_id>")
 def delete_song(song_id: str):
     path = song_path(song_id)
     if not path.exists():
         return error("Lied nicht gefunden", 404)
     if not is_manual_file(path):
-        return error("Nur hochgeladene Lieder können gelöscht werden.", 403)
+        return error("Nur eigene Lieder (Freitext oder hochgeladen) können gelöscht werden.", 403)
     path.unlink()
     return jsonify({"ok": True})
 

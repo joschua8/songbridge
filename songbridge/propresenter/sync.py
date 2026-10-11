@@ -107,16 +107,16 @@ def song_lines(song: Song) -> list[str]:
     return [t for g in groups for slide in g.slides for kind, t in slide if kind != "spacer" and t.strip()]
 
 
-def pro_lines(path: Path) -> tuple[str, list[str], bool]:
-    """-> (Präsentationsname, Textzeilen aller Folien außer der Titelfolie, hat Titelfolie?)."""
+def pro_lines(path: Path) -> tuple[str, list[str], list[str] | None]:
+    """-> (Präsentationsname, Textzeilen aller Folien außer der Titelfolie, Zeilen der Titelfolie bzw. None ohne)."""
     pres = presentation_pb2.Presentation()
     pres.ParseFromString(path.read_bytes())
     title_cues = {cid.string for cg in pres.cue_groups if cg.group.name == pro_export.TITLE_NAME
                   for cid in cg.cue_identifiers}
     lines: list[str] = []
+    title: list[str] = []
     for cue in pres.cues:
-        if cue.uuid.string in title_cues:
-            continue
+        target = title if cue.uuid.string in title_cues else lines
         for action in cue.actions:
             if not action.HasField("slide"):
                 continue
@@ -125,8 +125,8 @@ def pro_lines(path: Path) -> tuple[str, list[str], bool]:
                 if not rtf:
                     continue
                 text = rtf_to_text(rtf.decode("latin-1", errors="replace"))
-                lines.extend(ln for ln in text.split("\n") if ln.strip())
-    return pres.name, lines, bool(title_cues)
+                target.extend(ln for ln in text.split("\n") if ln.strip())
+    return pres.name, lines, title if title_cues else None
 
 
 def compare_lines(db: list[str], pp: list[str]) -> tuple[bool, list[str], list[str]]:
@@ -240,14 +240,19 @@ def diff(songs_dir: Path, pp_dir: Path | None, index: dict, style=None) -> list[
             rows.append(DiffRow("db_only", s.name, s))
             continue
         try:
-            _, lines, has_title = pro_lines(f)
+            _, lines, title = pro_lines(f)
         except Exception as exc:
             rows.append(DiffRow("error", s.name, s, f, note=f".pro nicht lesbar: {exc}"))
             continue
         same, only_db, only_pp = compare_lines(song_lines(s.song), lines)
         note = "" if nfc(f.stem) == nfc(s.stem) else f"Dateiname in ProPresenter: {nfc(f.name)}"
-        if same and style is not None and style.title_slide and s.song.title.strip() and not has_title:
-            same, note = False, "; ".join(filter(None, ["Titelfolie fehlt", note]))
+        if same and style is not None and style.title_slide and s.song.title.strip():
+            # Fehlt die Titelfolie oder steht anderes drauf (z. B. ältere Fassung ohne Autor/Copyright) -> neu schreiben.
+            want = [t for k, t in pro_export.title_slide(s.song, style) if t.strip()]
+            problem = ("Titelfolie fehlt" if title is None
+                       else "" if [norm_line(x) for x in title] == [norm_line(x) for x in want] else "Titelfolie veraltet")
+            if problem:
+                same, note = False, "; ".join(filter(None, [problem, note]))
         rows.append(DiffRow("same" if same else "different", s.name, s, f, only_db, only_pp, note))
     for f in files:
         if f not in used:

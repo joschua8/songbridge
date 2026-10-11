@@ -31,7 +31,7 @@ from typing import Callable
 
 import requests
 
-from songbridge.songs.sng import is_manual_file
+from songbridge.songs.sng import is_edited_file, is_manual_file
 
 DEFAULT_URL = "https://kirche-am-fahlt.church.tools"
 PAGE_SIZE = 100
@@ -198,8 +198,8 @@ def safe_filename(name: str) -> str:
 
 def unique_path(path: Path, taken: set[Path]) -> Path:
     candidate, n = path, 2
-    # Von Hand erfasste Lieder (Weboberfläche) werden nie überschrieben.
-    while candidate in taken or is_manual_file(candidate):
+    # Von Hand erfasste oder in SongBridge bearbeitete Lieder werden nie überschrieben.
+    while candidate in taken or is_manual_file(candidate) or is_edited_file(candidate):
         candidate = path.with_name(f"{path.stem} ({n}){path.suffix}")
         n += 1
     taken.add(candidate)
@@ -346,6 +346,8 @@ def plan_sync(songs: list[dict], out_dir: Path, by_category: bool, base_url: str
                     status, reason = "changed", "Name/Arrangement geändert"
                 else:
                     status, reason = "unchanged", ""
+                if status != "unchanged" and is_edited_file(out_dir / rel):
+                    reason = "; ".join(filter(None, [reason, "in SongBridge bearbeitet – bleibt erhalten"]))
             else:
                 target_dir = out_dir / safe_filename(category) if by_category else out_dir
                 stem = safe_filename(title)
@@ -394,6 +396,12 @@ def sync(
         target = out_dir / it.rel
         target.parent.mkdir(parents=True, exist_ok=True)
         label = {"new": "NEU ", "changed": "AKT ", "unknown": "AKT ", "unchanged": "AKT "}[it.status]
+        if is_edited_file(target):
+            # Bisheriger Indexeintrag (alter Fingerabdruck) bleibt -> beim nächsten Abgleich wieder „geändert“.
+            log(f"[{i}/{len(todo)}] BEHALTEN {it.rel} (in SongBridge bearbeitet – „Original wiederherstellen“ "
+                "in der Bibliothek, um die ChurchTools-Fassung zu übernehmen)")
+            result.skipped += 1
+            continue
         try:
             if is_manual_file(target):
                 raise ChurchToolsError("Zieldatei ist ein von Hand erfasstes Lied – wird nicht überschrieben")
@@ -409,7 +417,7 @@ def sync(
     removable = {r["rel"] for r in plan.removed}
     for rel in sorted((delete or set()) & removable):
         path = out_dir / rel
-        if path.exists() and not is_manual_file(path):
+        if path.exists() and not is_manual_file(path) and not is_edited_file(path):
             path.unlink()
             result.deleted.append(rel)
             log(f"GELÖSCHT {rel}")
