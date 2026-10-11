@@ -400,7 +400,8 @@ LORDS_PRAYER_NAMES = ("Vater Unser", "Vaterunser")
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
 VIDEO_EXT = {".mp4", ".mov", ".m4v"}
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac"}
-SLIDES_EXT = {".pptx", ".ppt", ".key", ".pdf"}
+# PDFs am Termin (meist Handzettel/Liedblätter) werden wie .docx nicht übernommen, nur in der Hinweiszeile genannt.
+SLIDES_EXT = {".pptx", ".ppt", ".key"}
 KEYNOTE_IDS = ("com.apple.Keynote", "com.apple.iWork.Keynote")
 
 
@@ -497,7 +498,7 @@ def add_auto_rows(rows: list[dict], matcher: Matcher, root: Path | None, setting
     prayer = None
 
     files_after: dict[int, list[dict]] = {}
-    skipped: list[str] = []  # .docx & Co. kommen nicht in die Playlist, nur als Hinweis-Kopfzeile
+    skipped: list[str] = []  # .docx, .pdf & Co. kommen nicht in die Playlist, nur als Hinweis-Kopfzeile
     for f in event_files:
         kind = media_kind(f["name"])
         if not kind:

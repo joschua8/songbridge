@@ -70,8 +70,8 @@ ersten Bearbeiten unter `backup/originale/` gesichert).
 
 Präsentationen (.pptx/.ppt), die in ChurchTools am Termin hängen, werden für die Playlist in Bilder
 umgewandelt. Dafür braucht es **LibreOffice** (kostenlos, libreoffice.org) oder – nur unter
-Windows – ein installiertes **Microsoft PowerPoint**. PDF, Bilder, Videos und Audio gehen ohne.
-Andere Dateien (z. B. .docx) werden gar nicht erst heruntergeladen; ihre Namen stehen in einer orangen
+Windows – ein installiertes **Microsoft PowerPoint**. Bilder, Videos und Audio gehen ohne.
+Andere Dateien (z. B. .docx oder .pdf) werden gar nicht erst heruntergeladen; ihre Namen stehen in einer orangen
 Kopfzeile ganz oben, damit nichts übersehen wird.
 
 ## Lieder in der Playlist (Windows)
