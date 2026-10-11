@@ -117,6 +117,12 @@ mark { background: var(--warn-soft); color: inherit; }
 .dropzone b { color: var(--text); }
 .up-results { list-style: none; margin: 14px 0 0; padding: 0; }
 .up-results li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.freetext { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.freetext .panel { padding: 20px; }
+.freetext textarea { min-height: 360px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.5; resize: vertical; }
+.help pre { margin: 6px 0 0; font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
+.help ul { margin: 6px 0 0; padding-left: 18px; } .help li { margin: 3px 0; }
+.ft-warn { list-style: none; margin: 0 0 14px; padding: 0; } .ft-warn li { margin-bottom: 6px; }
 .help { font-size: 13px; color: var(--muted); background: var(--code); border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; }
 .help code { font-size: 12px; }
 .help summary { cursor: pointer; }
@@ -289,7 +295,7 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
   .subbar { padding: 10px 16px 0; }
   main { padding: 12px 16px; }
   .settings { grid-template-columns: 1fr; } .rows .diff { grid-template-columns: 1fr; }
-  .library, .uploader, .import, .grid2, .exporter, .planner { grid-template-columns: 1fr; height: auto; }
+  .library, .uploader, .freetext, .import, .grid2, .exporter, .planner { grid-template-columns: 1fr; height: auto; }
   .planner .list-pane { height: 60vh; } .plan-pane { height: 75vh; }
   .exporter .list-pane { height: 60vh; } .preview-pane { height: 75vh; }
   .list-pane { max-height: 50vh; }
@@ -345,6 +351,68 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
           <b>Dateien hierher ziehen</b><br>oder klicken zum Auswählen
         </label>
         <ul class="up-results" id="up-results"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-freetext" hidden>
+    <div class="freetext">
+      <div class="panel">
+        <h3 id="ft-head">Lied als Freitext erfassen</h3>
+        <p class="muted" id="ft-lead" style="font-size:13px;margin-top:0">Für Lieder ohne .sng- oder SongSelect-Datei: Liedtext einfügen,
+          Abschnitte wie unten beschrieben kennzeichnen. Rechts siehst du sofort, wie das Programm den Text versteht.</p>
+        <div id="ft-edit-note"></div>
+        <div class="grid2">
+          <div class="field"><label for="ft-title">Titel *</label><input type="text" id="ft-title" autocomplete="off"></div>
+          <div class="field"><label for="ft-author">Autor(en)</label><input type="text" id="ft-author" autocomplete="off"></div>
+          <div class="field"><label for="ft-copyright">Copyright</label><input type="text" id="ft-copyright" placeholder="z. B. 2015 SCM Hänssler" autocomplete="off"></div>
+          <div class="field"><label for="ft-ccli">CCLI-Liednummer</label><input type="text" id="ft-ccli" inputmode="numeric" autocomplete="off"></div>
+        </div>
+        <details class="help" id="ft-help" open>
+          <summary><b>So muss der Text aussehen</b> (damit Strophen, Refrain usw. richtig erkannt werden)</summary>
+          <ul>
+            <li><b>Leerzeile</b> zwischen den Abschnitten – innerhalb eines Abschnitts keine Leerzeilen.</li>
+            <li>Die <b>erste Zeile</b> eines Abschnitts ist sein <b>Name</b>, allein in der Zeile:
+              <code>Strophe 1</code>, <code>Refrain</code>, <code>Pre-Chorus</code>, <code>Bridge</code>, <code>Intro</code>,
+              <code>Zwischenspiel</code>, <code>Instrumental</code>, <code>Schluss</code>, <code>Tag</code>
+              (auch englisch: <code>Verse</code>, <code>Chorus</code>, <code>Outro</code>, <code>Ending</code>).
+              Nummer, Doppelpunkt oder Klammern sind erlaubt: <code>Strophe 2:</code>, <code>[Refrain]</code>.</li>
+            <li><b>Wiederholung:</b> nur den Namen als eigenen Abschnitt schreiben (z. B. <code>Refrain</code> mit Leerzeile davor und danach) –
+              den Text nicht noch einmal abtippen. Kein „2x“ oder „(Refrain)“ in die Liedzeilen schreiben.</li>
+            <li>Jede Zeile hier = eine Zeile auf der Folie. Lange Zeilen lieber teilen; Folien werden automatisch nach „Zeilen pro Folie“ aufgeteilt.</li>
+            <li>Ohne Namen gilt ein Abschnitt als nächste Strophe; <code>1. Text …</code> am Anfang = Strophe 1. Keine Akkorde.</li>
+          </ul>
+          <pre>Strophe 1
+Erste Zeile der Strophe
+Zweite Zeile der Strophe
+
+Refrain
+Erste Zeile des Refrains
+Zweite Zeile des Refrains
+
+Strophe 2
+…
+
+Refrain
+
+Bridge
+…
+
+Refrain</pre>
+        </details>
+        <div class="field"><label for="ft-text">Liedtext *</label><textarea id="ft-text" spellcheck="false"></textarea></div>
+        <div class="btn-row">
+          <button class="btn primary" id="ft-save">Lied speichern</button>
+          <button class="btn" id="ft-clear">Leeren</button>
+          <button class="btn" id="ft-cancel" hidden>Abbrechen</button>
+          <span class="muted" id="ft-info" style="font-size:13px"></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>So wird das Lied gespeichert</h3>
+        <ul class="ft-warn" id="ft-warn"></ul>
+        <div class="order" id="ft-order"></div>
+        <div id="ft-preview"><p class="muted">Noch kein Text.</p></div>
       </div>
     </div>
   </section>
@@ -592,7 +660,7 @@ async function api(path, opts = {}) {
 /* ---------------- Navigation ---------------- */
 // Hauptbereiche mit Unterreitern; jede Ansicht ist eine <section id="tab-…">.
 const AREAS = {
-  lieder: {views: [["songs", "Bibliothek"], ["upload", "Hochladen"]]},
+  lieder: {views: [["songs", "Bibliothek"], ["upload", "Hochladen"], ["freetext", "Freitext"]]},
   ct: {views: [["plan", "Ablaufpläne"], ["import", "Lieder-Import"]]},
   pp: {views: [["ppdiff", "Abgleich"], ["export", "Export & Formatierung"]]},
   settings: {views: [["settings", "Einstellungen"]]},
@@ -663,13 +731,17 @@ function snippet(s, q) {
   return "";
 }
 
+// manuell = Freitext/Upload (löschbar), bearbeitet = ChurchTools-Lied mit eigenen Änderungen
+const songBadge = s => s.manual ? '<span class="badge manual">eigenes Lied</span>'
+  : s.edited ? '<span class="badge manual" title="In SongBridge bearbeitet – der Import überschreibt es nicht">bearbeitet</span>' : "";
+
 function renderList() {
   const q = $("#q").value.trim().toLowerCase();
   const items = visible();
   $("#list").innerHTML = items.map(s => {
     let badge = "";
     if (s.kind === "missing") badge = s.covered ? '<span class="badge covered">erfasst</span>' : '<span class="badge missing">ohne .sng</span>';
-    else if (s.manual) badge = '<span class="badge manual">hochgeladen</span>';
+    else badge = songBadge(s);
     const hit = snippet(s, q);
     return `<li data-id="${esc(s.id)}" class="${s.id === selected ? "sel" : ""}">
       <div class="t"><span>${esc(s.title)}</span>${badge}</div>
@@ -679,7 +751,7 @@ function renderList() {
   const manual = songs.filter(s => s.manual).length;
   const open = missing.filter(m => !m.covered).length;
   const filtered = q || filter !== "all";
-  $("#count").textContent = `${songs.length} Lieder (${manual} hochgeladen) · ${open} noch ohne Text` +
+  $("#count").textContent = `${songs.length} Lieder (${manual} eigene) · ${open} noch ohne Text` +
     (filtered ? ` · ${items.length} angezeigt` : "");
   renderExportList();
 }
@@ -725,17 +797,19 @@ function select(id, scroll = true) {
         ${m.category ? `<div>Kategorie: ${esc(m.category)}</div>` : ""}
       </div>
       <div class="notice ${m.covered ? "ok" : "warn"}">${m.covered
-        ? "In ChurchTools ohne .sng-Datei – das Lied wurde aber bereits hochgeladen."
-        : "Für dieses Lied gibt es in ChurchTools keine .sng-Datei. Du kannst es aus SongSelect herunterladen und hier hochladen."}</div>
+        ? "In ChurchTools ohne .sng-Datei – das Lied wurde aber bereits erfasst."
+        : "Für dieses Lied gibt es in ChurchTools keine .sng-Datei. Du kannst es aus SongSelect herunterladen und hier hochladen oder den Text als Freitext erfassen."}</div>
       <div class="btn-row">
-        ${m.covered ? "" : '<button class="btn primary" data-goto="upload">SongSelect-Datei hochladen</button>'}
+        ${m.covered ? "" : '<button class="btn primary" data-goto="upload">SongSelect-Datei hochladen</button> <button class="btn" id="d-freetext">Als Freitext erfassen</button>'}
         ${m.link ? `<a class="btn" href="${esc(m.link)}" target="_blank" rel="noopener">In ChurchTools öffnen</a>` : ""}
       </div>`;
+    const ft = $("#d-freetext");
+    if (ft) ft.onclick = () => startFreetext({title: m.title, author: m.author});
     return;
   }
   const s = songs.find(x => x.id === id);
   if (!s) { d.innerHTML = '<p class="empty">Lied links auswählen.</p>'; return; }
-  d.innerHTML = `<h2>${esc(s.title)} ${s.manual ? '<span class="badge manual">hochgeladen</span>' : ""}</h2>
+  d.innerHTML = `<h2>${esc(s.title)} ${songBadge(s)}</h2>
     <div class="meta">
       ${s.author ? `<div>${esc(s.author)}</div>` : ""}
       ${s.ccli ? `<div>CCLI ${esc(s.ccli)}</div>` : ""}
@@ -746,10 +820,24 @@ function select(id, scroll = true) {
       <a class="btn" href="${exportUrl("pro", s.id)}">.pro herunterladen</a>
       <a class="btn" href="${exportUrl("json", s.id)}" target="_blank" rel="noopener">.json ansehen</a>
       <button class="btn" id="d-preview">Folienvorschau</button>
+      <button class="btn" id="d-edit">Bearbeiten</button>
+      ${s.hasOriginal ? '<button class="btn" id="d-restore" title="Änderungen verwerfen und die Fassung aus ChurchTools zurückholen">Original wiederherstellen</button>' : ""}
       ${s.manual ? '<button class="btn danger" id="d-del">Löschen</button>' : ""}</div>
     <div class="sections">${renderSections(s.sections, s.langCount)}</div>`;
   if (scroll) d.scrollTop = 0;
   $("#d-preview").onclick = () => { showTab("export"); focusPreview(s.id); };
+  $("#d-edit").onclick = () => editSong(s.id);
+  const restore = $("#d-restore");
+  if (restore) restore.onclick = async () => {
+    if (!restore.classList.contains("armed")) {
+      restore.classList.add("armed"); restore.textContent = "Wirklich zurücksetzen?";
+      setTimeout(() => { restore.classList.remove("armed"); restore.textContent = "Original wiederherstellen"; }, 4000);
+      return;
+    }
+    await api("/api/songs/" + encodeURIComponent(s.id) + "/restore", {method: "POST"});
+    await loadSongs();
+    select(s.id);
+  };
   if (s.manual) {
     const del = $("#d-del");
     del.onclick = async () => {
@@ -797,6 +885,112 @@ $("#up-results").onclick = e => {
   if (a) { e.preventDefault(); showTab("songs"); select(a.dataset.song); }
 };
 
+/* ---------------- Freitext ---------------- */
+const FT_FIELDS = ["title", "author", "copyright", "ccli", "text"];
+const ftData = () => Object.fromEntries(FT_FIELDS.map(k => [k, $("#ft-" + k).value]));
+let ftEdit = null;  // {id, title} beim Bearbeiten eines vorhandenen Liedes, sonst neues Lied
+const ftFill = data => FT_FIELDS.forEach(k => $("#ft-" + k).value = data[k] || "");
+function ftDraft() { try { return JSON.parse(store.get("freetext") || "{}") || {}; } catch { return {}; } }
+
+function setEditMode(song) {
+  ftEdit = song ? {id: song.id, title: song.title} : null;
+  $("#ft-head").textContent = song ? `Lied bearbeiten: ${song.title}` : "Lied als Freitext erfassen";
+  $("#ft-lead").hidden = !!song;
+  $("#ft-save").textContent = song ? "Änderungen speichern" : "Lied speichern";
+  $("#ft-clear").hidden = !!song;
+  $("#ft-cancel").hidden = !song;
+  $("#ft-help").open = !song;  // beim Bearbeiten steht der Text im Vordergrund
+  const notes = [];
+  if (song && !song.manual) notes.push("Dieses Lied kommt aus ChurchTools. Nach dem Speichern behält der Lieder-Import deine Fassung " +
+    "(auch wenn das Lied in ChurchTools geändert wird). Über „Original wiederherstellen“ in der Bibliothek kommst du zur ChurchTools-Fassung zurück.");
+  if (song && song.langCount > 1) notes.push("Zweisprachiges Lied: In jedem Abschnitt wechseln sich die Zeilen ab – Original, Übersetzung, Original, Übersetzung …");
+  $("#ft-edit-note").innerHTML = notes.map(n => `<div class="notice">${esc(n)}</div>`).join("");
+}
+
+async function editSong(id) {
+  if (!ftEdit) try { store.set("freetext", JSON.stringify(ftData())); } catch {}  // Entwurf für neues Lied merken
+  const song = await api("/api/songs/" + id.split("/").map(encodeURIComponent).join("/"));
+  ftFill({...song, text: song.freetext});
+  setEditMode(song);
+  $("#ft-info").textContent = "";
+  showTab("freetext");
+  refreshFreetext();
+  $("#ft-text").focus();
+}
+function endEdit() {
+  setEditMode(null);
+  ftFill(ftDraft());
+  refreshFreetext();
+}
+
+// Titel/Autor aus dem gewählten Lied übernehmen; ein angefangener Liedtext bleibt stehen (Knopf „Leeren“).
+function startFreetext(prefill = {}) {
+  if (ftEdit) endEdit();
+  for (const [k, v] of Object.entries(prefill)) $("#ft-" + k).value = v || "";
+  showTab("freetext");
+  refreshFreetext();
+  $("#ft-text").focus();
+}
+async function refreshFreetext() {
+  clearTimeout(refreshFreetext.t);
+  if (!ftEdit) try { store.set("freetext", JSON.stringify(ftData())); } catch {}
+  refreshFreetext.t = setTimeout(async () => {
+    if (!$("#ft-text").value.trim()) {
+      $("#ft-warn").innerHTML = $("#ft-order").innerHTML = "";
+      $("#ft-preview").innerHTML = '<p class="muted">Noch kein Text.</p>';
+      return;
+    }
+    try {
+      const data = await api("/api/songs/freetext/preview", {method: "POST", body: ftData()});
+      $("#ft-warn").innerHTML = data.warnings.map(w => `<li class="notice warn" style="margin:0">${esc(w)}</li>`).join("");
+      $("#ft-order").innerHTML = data.sections.length
+        ? '<span class="muted" style="font-size:12px;margin-right:4px">Reihenfolge:</span>' + data.sections.map(s => `<span class="badge">${esc(s.label)}</span>`).join("")
+        : "";
+      // Jeden Abschnitt nur einmal mit Text zeigen, Wiederholungen nur in der Reihenfolge
+      const seen = new Set();
+      $("#ft-preview").innerHTML = `<div class="sections">${renderSections(data.sections.filter(s => !seen.has(s.label) && seen.add(s.label))
+        .map(s => s.lines.length ? s : {...s, lines: ["(ohne Text – leere Folie)"]}))}</div>`;
+    } catch (err) {
+      $("#ft-preview").innerHTML = `<div class="notice error">${esc(err.message)}</div>`;
+    }
+  }, 250);
+}
+FT_FIELDS.forEach(k => $("#ft-" + k).addEventListener("input", refreshFreetext));
+ftFill(ftDraft());  // Entwurf (neues Lied) bleibt im Browser erhalten
+if ($("#ft-text").value.trim()) refreshFreetext();
+$("#ft-cancel").onclick = () => { const id = ftEdit.id; endEdit(); showTab("songs"); select(id); };
+$("#ft-clear").onclick = () => {
+  FT_FIELDS.forEach(k => $("#ft-" + k).value = "");
+  $("#ft-info").textContent = "";
+  refreshFreetext();
+};
+$("#ft-save").onclick = async () => {
+  const btn = $("#ft-save");
+  btn.disabled = true;
+  $("#ft-info").textContent = "Speichert …";
+  try {
+    if (ftEdit) {
+      const res = await api("/api/songs/" + ftEdit.id.split("/").map(encodeURIComponent).join("/"), {method: "PUT", body: ftData()});
+      endEdit();
+      await loadSongs();
+      showTab("songs");
+      select(res.id);
+      return;
+    }
+    const res = await api("/api/songs/freetext", {method: "POST", body: ftData()});
+    FT_FIELDS.forEach(k => $("#ft-" + k).value = "");
+    refreshFreetext();
+    await loadSongs();
+    $("#ft-info").innerHTML = `<span style="color:var(--ok)">✓</span> Gespeichert: <a href="#" data-song="${esc(res.id)}">${esc(res.title)}</a>`;
+  } catch (err) {
+    $("#ft-info").innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
+  } finally { btn.disabled = false; }
+};
+$("#ft-info").onclick = e => {
+  const a = e.target.closest("[data-song]");
+  if (a) { e.preventDefault(); showTab("songs"); select(a.dataset.song); }
+};
+
 /* ---------------- Export ---------------- */
 const exportUrl = (fmt, id) => `/api/export/${fmt}/${id.split("/").map(encodeURIComponent).join("/")}`;
 
@@ -830,7 +1024,7 @@ function renderExportList() {
   const items = xVisible();
   $("#x-list").innerHTML = items.map(s => `<li data-id="${esc(s.id)}" class="${s.id === xFocus ? "sel" : ""}">
       <input type="checkbox" ${xSel.has(s.id) ? "checked" : ""} aria-label="${esc(s.title)} auswählen">
-      <div class="info"><div class="t"><span title="Exportname: ${esc(s.exportName)}.pro">${esc(s.exportName)}</span>${s.manual ? '<span class="badge manual">hochgeladen</span>' : ""}</div>
+      <div class="info"><div class="t"><span title="Exportname: ${esc(s.exportName)}.pro">${esc(s.exportName)}</span>${songBadge(s)}</div>
       ${s.author ? `<div class="a">${esc(s.author)}</div>` : ""}</div></li>`).join("")
     || '<li class="muted" style="cursor:default">Keine Treffer.</li>';
   const filtered = $("#x-q").value.trim() || xFilter !== "all";
@@ -869,7 +1063,13 @@ const STYLE_FORM = [
     ["pairs_per_slide", "Zeilenpaare (zweisprachig)", "number", {min: 1, max: 6}],
     ["background", "Hintergrund", "color"],
     ["blank_first", "Leere Folie vor dem Liedtext", "check"],
+  ]],
+  ["Titelfolie", [
     ["title_slide", "Titelfolie vor dem Liedtext", "check"],
+    ["title_size", "Titelgröße (pt)", "number", {min: 8, max: 300}],
+    ["title_meta", "Autor, © und CCLI-Nr. zeigen", "check"],
+    ["meta_size", "Größe der Angaben (pt)", "number", {min: 8, max: 300}],
+    ["title_center", "Senkrecht in der Folienmitte", "check"],
   ]],
   ["Liedtext", [
     ["main.font", "Schriftart", "font"],
@@ -1047,16 +1247,26 @@ const boxGeom = st => `left:${st.margin_left}px;top:${st.margin_top}px;` +
   `width:${1920 - st.margin_left - st.margin_right}px;height:${1080 - st.margin_top - st.margin_bottom}px;`;
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
-function slideHtml(paras, st) {
+// Titelfolie: Schrift wie Liedtext, eigene Größen; mit title_center über die ganze Folienhöhe mittig (wie export.title_style).
+const titleStyle = st => st.title_center ? {...st, margin_top: 0, margin_bottom: 0, valign: "middle"} : st;
+function paraHtml(p, st) {
+  if (p.kind === "spacer" || p.kind === "gap")
+    return `<div class="p" style="font-size:calc(${p.kind === "gap" ? st.meta_size * 0.6 : st.pair_spacing}px * var(--k,1))">&nbsp;</div>`;
+  const ts = p.kind === "title" ? {...st.main, size: st.title_size}
+    : p.kind === "meta" ? {...st.main, size: st.meta_size, bold: false, italic: false, uppercase: false}
+    : p.kind === "main" ? st.main : st.translation;
+  return `<div class="p" style="${paraStyle(ts)}">${esc(p.text)}</div>`;
+}
+
+function slideHtml(paras, st, isTitle = false) {
+  if (isTitle) st = titleStyle(st);
   const j = {top: "flex-start", middle: "center", bottom: "flex-end"}[st.valign];
   const box = boxGeom(st) + `justify-content:${j};text-align:${st.align};` +
     (st.box_fill ? `background:${hexA(st.box_color, st.box_opacity)};` : "") +
     (st.shadow ? "text-shadow:4px 4px 0 #000;" : "");
-  const body = paras.map(p => p.kind === "spacer"
-    ? `<div class="p" style="font-size:calc(${st.pair_spacing}px * var(--k,1))">&nbsp;</div>`
-    : `<div class="p" style="${paraStyle(p.kind === "main" ? st.main : st.translation)}">${esc(p.text)}</div>`).join("");
-  return `<div class="stage" style="background:${st.background}"><div class="box" style="${box}"><div class="content">${body}</div></div>` +
-    `<div class="frame" style="${boxGeom(st)}" title="Ziehen zum Verschieben, Ecken/Kanten zum Ändern der Größe (Umschalt: ohne Einrasten)">` +
+  const body = paras.map(p => paraHtml(p, st)).join("");
+  return `<div class="stage"${isTitle ? " data-title" : ""} style="background:${st.background}"><div class="box" style="${box}"><div class="content">${body}</div></div>` +
+    `<div class="frame" style="${boxGeom(st)}${isTitle && st.title_center ? "display:none;" : ""}" title="Ziehen zum Verschieben, Ecken/Kanten zum Ändern der Größe (Umschalt: ohne Einrasten)">` +
     HANDLES.map(h => `<div class="h" data-h="${h}"></div>`).join("") + `</div><div class="guide gx"></div><div class="guide gy"></div></div>`;
 }
 
@@ -1070,7 +1280,7 @@ function renderPreview() {
   const cards = [];
   for (const g of pvData.groups)
     g.slides.forEach((paras, i) => cards.push(`<div class="slide-card">
-      <div class="thumb" style="--grp:${g.color}">${slideHtml(paras, st)}${i === 0 && g.hotkey ? `<span class="hk" title="Tastenkürzel">${esc(g.hotkey)}</span>` : ""}<span class="drag-info"></span></div>
+      <div class="thumb" style="--grp:${g.color}">${slideHtml(paras, st, g.title)}${i === 0 && g.hotkey ? `<span class="hk" title="Tastenkürzel">${esc(g.hotkey)}</span>` : ""}<span class="drag-info"></span></div>
       <div class="cap"><i style="background:${g.color}"></i>${esc(g.name)}${g.slides.length > 1 ? ` · ${i + 1}/${g.slides.length}` : ""}<span class="warn-tag"></span></div></div>`));
   $("#pv-slides").innerHTML = cards.join("") || '<p class="muted">Dieses Lied hat keine Folien.</p>';
   fitPreview();
@@ -1107,10 +1317,11 @@ function applyBoxGeometry() {
   const geom = boxGeom(style);
   document.querySelectorAll("#pv-slides .stage").forEach(stage => {
     const box = stage.querySelector(".box"), frame = stage.querySelector(".frame");
+    const st = "title" in stage.dataset ? titleStyle(style) : style;
     for (const el of [box, frame]) {
-      el.style.left = style.margin_left + "px"; el.style.top = style.margin_top + "px";
-      el.style.width = (1920 - style.margin_left - style.margin_right) + "px";
-      el.style.height = (1080 - style.margin_top - style.margin_bottom) + "px";
+      el.style.left = st.margin_left + "px"; el.style.top = st.margin_top + "px";
+      el.style.width = (1920 - st.margin_left - st.margin_right) + "px";
+      el.style.height = (1080 - st.margin_top - st.margin_bottom) + "px";
     }
   });
   return geom;
@@ -1878,7 +2089,7 @@ async function openSettingsTab() {
   applyLibrary(await api("/api/playlist/library"));
   refreshUpdate();
   $("#s-db").innerHTML = `<span>Ordner</span><code>${esc(appSettings.songsDir)}</code>
-    <span>Lieder</span><span>${songs.length} (${songs.filter(s => s.manual).length} hochgeladen)</span>
+    <span>Lieder</span><span>${songs.length} (${songs.filter(s => s.manual).length} eigene)</span>
     <span>Ohne .sng</span><span>${missing.filter(m => !m.covered).length} noch ohne Text</span>`;
 }
 

@@ -16,6 +16,8 @@ from pathlib import Path
 
 # Kennzeichnet von Hand erfasste Lieder; der ChurchTools-Import überschreibt sie nie.
 MANUAL_EDITOR = "Liederverwaltung (manuell)"  # früherer Programmname – Kennung in vorhandenen Dateien, nicht ändern
+# Kopfzeile in ChurchTools-Liedern, die in SongBridge bearbeitet wurden (Wert: Datum). Der Import überschreibt sie nicht.
+EDITED_KEY = "SongBridgeEdited"
 
 # Freitext-Schlüsselwort -> SongBeamer-Abschnittstyp
 LABEL_TYPES = {
@@ -193,6 +195,15 @@ def read_sng(path: Path) -> Song:
     return parse_sng(read_text(path))
 
 
+def is_edited_file(path: Path) -> bool:
+    """ChurchTools-Lied, das in SongBridge bearbeitet wurde (siehe EDITED_KEY)?"""
+    try:
+        head = read_text(path)[:2000]
+    except OSError:
+        return False
+    return f"#{EDITED_KEY}=" in head
+
+
 def is_manual_file(path: Path) -> bool:
     try:
         head = read_text(path)[:2000]
@@ -205,17 +216,20 @@ def is_manual_file(path: Path) -> bool:
 
 
 def build_sng(song: Song) -> str:
+    """Song -> .sng-Text. Weitere Kopfzeilen aus song.headers (z. B. #BackgroundImage beim Bearbeiten) bleiben erhalten."""
     order = song.order or [s.label for s in song.sections]
     header = [
-        ("LangCount", "1"),
+        ("LangCount", str(song.lang_count or 1)),
         ("Title", song.title),
-        ("Editor", MANUAL_EDITOR),
+        ("Editor", song.editor or MANUAL_EDITOR),
         ("Version", "3"),
         ("Author", song.author),
         ("CCLI", song.ccli),
         ("(c)", song.copyright),
         ("VerseOrder", ",".join(order)),
     ]
+    known = {k for k, _ in header}
+    header += [(k, v) for k, v in song.headers.items() if k not in known]
     out = [f"#{k}={_one_line(v)}" for k, v in header if v or k in ("Title", "LangCount")]
     for sec in song.sections:
         out.append("---")
@@ -332,6 +346,30 @@ def parse_freetext(text: str) -> tuple[list[Section], list[str], list[str]]:
     return sections, order, warnings
 
 
+# Liedzeile, die eigentlich eine Regieanweisung ist: „Refrain 2x“, „(Bridge)“, „[Chorus wdh.]“, „(2x)“.
+_HINT_RE = re.compile(
+    r"^\s*[\[(]?\s*(?:(?:" + "|".join(sorted(map(re.escape, LABEL_TYPES), key=len, reverse=True)) + r")\b.*"
+    r"|\d+\s*[x×]|[x×]\s*\d+|wdh\.?|wiederholen|wiederholung|repeat)\s*[\])]?\s*:?\s*$",
+    re.IGNORECASE,
+)
+
+
+def freetext_hints(sections: list[Section]) -> list[str]:
+    """Hinweise auf Zeilen, die vermutlich nicht als Liedtext gemeint sind (Freitext-Eingabe)."""
+    hints = []
+    for sec in sections:
+        for line in sec.lines:
+            if _HINT_RE.match(line):
+                hints.append(f"„{line.strip()}“ in {sec.label} wird als Liedtext gelesen. Abschnittsnamen und Wiederholungen "
+                             "gehören allein in die erste Zeile eines Blocks (Leerzeile davor), z. B. nur „Refrain“.")
+            elif len(line) > 50:
+                hints.append(f"Lange Zeile in {sec.label} ({len(line)} Zeichen) – passt evtl. nicht auf eine Folienzeile: "
+                             f"„{line[:40].strip()} …“")
+    if sections and not any(s.label.startswith(("Chorus", "Refrain")) for s in sections) and len(sections) > 1:
+        hints.append("Kein Refrain erkannt – falls es einen gibt, die erste Zeile des Blocks „Refrain“ nennen.")
+    return hints
+
+
 def song_to_freetext(song: Song) -> str:
     """Gegenstück zu parse_freetext – zum Bearbeiten eines gespeicherten Liedes."""
     by_label = {s.label: s for s in song.sections}
@@ -343,10 +381,15 @@ def song_to_freetext(song: Song) -> str:
             parts.append(label)
         else:
             seen.add(label)
-            parts.append("\n".join([label] + by_label[label].lines))
+            parts.append("\n".join([label] + _text_lines(by_label[label])))
     unused = [s for s in song.sections if s.label not in seen]
-    parts.extend("\n".join([s.label] + s.lines) for s in unused)
+    parts.extend("\n".join([s.label] + _text_lines(s)) for s in unused)
     return "\n\n".join(parts)
+
+
+def _text_lines(section: Section) -> list[str]:
+    # Leerzeilen innerhalb eines Abschnitts (kommen in ChurchTools-Dateien vor) würden ihn im Freitext teilen.
+    return [ln for ln in section.lines if ln.strip()]
 
 
 def _norm_lines(lines: list[str]) -> str:

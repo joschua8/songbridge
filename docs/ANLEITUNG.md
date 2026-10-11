@@ -52,6 +52,20 @@ stellst du in der Oberfläche unter **Einstellungen** ein.
 Unter **Lieder → Hochladen** Dateien aus CCLI SongSelect (`.usr` oder `.txt`) oder SongBeamer-Dateien
 (`.sng`) hineinziehen. Gibt es ein Lied mit gleichem Titel schon, wird es nicht überschrieben.
 
+Ohne Datei geht es über **Lieder → Freitext**: Titel und Liedtext eintragen. Wichtig für die richtige
+Aufteilung: Leerzeile zwischen den Abschnitten, der Name des Abschnitts (`Strophe 1`, `Refrain`,
+`Bridge` …) allein in der ersten Zeile, Wiederholungen nur als Name (z. B. `Refrain`) statt den Text
+noch einmal zu tippen. Die Anleitung mit Beispiel steht direkt über dem Textfeld, rechts daneben
+siehst du sofort, wie das Lied gespeichert wird.
+
+## Lieder bearbeiten
+
+Jedes Lied hat in der Bibliothek den Knopf **Bearbeiten** – auch Lieder aus ChurchTools. Der Text
+öffnet sich im gleichen Format wie beim Freitext. Bearbeitete ChurchTools-Lieder tragen die Markierung
+„bearbeitet“: Der Lieder-Import überschreibt sie nicht mehr, auch wenn sich das Lied in ChurchTools ändert.
+Mit **Original wiederherstellen** holst du die ursprüngliche ChurchTools-Fassung zurück (sie wird beim
+ersten Bearbeiten unter `backup/originale/` gesichert).
+
 ## PowerPoint-Dateien im Ablaufplan
 
 Präsentationen (.pptx/.ppt), die in ChurchTools am Termin hängen, werden für die Playlist in Bilder

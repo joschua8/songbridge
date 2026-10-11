@@ -23,13 +23,13 @@ import math
 import os
 import re
 import uuid
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 from songbridge.paths import DATA_DIR, RES_DIR
 from songbridge.propresenter import formatter, proto  # noqa: F401  (proto: pb2-Module in den Suchpfad)
 from songbridge.propresenter.formatter import parse_presentation, presentation_to_json
-from songbridge.songs.sng import Section, Song, read_sng
+from songbridge.songs.sng import LABEL_TYPES, Section, Song, read_sng
 
 import graphicsData_pb2  # noqa: E402
 import hotKey_pb2  # noqa: E402
@@ -102,6 +102,11 @@ DEFAULT_HOTKEYS = {
 HOTKEY_ALIASES = {"Instrumental": "Interlude", "Ending": "Outro"}
 _HOTKEY_RE = re.compile(r"^[A-Z0-9]$")
 
+# Regiehinweise, die allein in Klammern auf einer Zeile stehen („(Bridge)“, „[Chorus 2]“, „(REPEAT)“, „(2x)“).
+# Gehören nicht auf die Folie. Steht ein Abschnittsname am Anfang von „Misc“, benennt er die Gruppe.
+_CUE_LINE_RE = re.compile(r"^\s*[\[(]\s*([^\[\]()]*?)\s*[\])]\s*:?\s*$")
+_CUE_DIRECTIONS = {"repeat", "wiederholen", "wiederholung", "vamp", ""}
+
 _ALIGN = {"left": ("\\ql", "ALIGNMENT_LEFT"), "center": ("\\qc", "ALIGNMENT_CENTER"), "right": ("\\qr", "ALIGNMENT_RIGHT")}
 _VALIGN = {"top": "VERTICAL_ALIGNMENT_TOP", "middle": "VERTICAL_ALIGNMENT_MIDDLE", "bottom": "VERTICAL_ALIGNMENT_BOTTOM"}
 
@@ -145,6 +150,10 @@ class ExportStyle:
     shrink_to_fit: bool = False   # ProPresenter verkleinert Schrift, wenn der Text nicht passt
     blank_first: bool = True      # leere Folie vor dem Liedtext
     title_slide: bool = True      # Folie mit dem Liedtitel vor dem Liedtext (nach der leeren Folie)
+    title_size: float = 130       # Schriftgröße des Titels (Schrift/Farbe wie Liedtext)
+    title_meta: bool = True       # Autor, Copyright und CCLI-Nummer unter dem Titel
+    meta_size: float = 40         # Schriftgröße dieser Angaben
+    title_center: bool = True     # Titel senkrecht in der Folienmitte statt in der Liedtext-Box
     hotkeys_enabled: bool = True  # Tastenkürzel wie im Beispiel setzen
     hotkeys: dict = field(default_factory=lambda: dict(DEFAULT_HOTKEYS))  # Gruppenname -> Taste
 
@@ -168,6 +177,8 @@ class ExportStyle:
         style.lines_per_slide = _clamp(style.lines_per_slide, 1, 12)
         style.pairs_per_slide = _clamp(style.pairs_per_slide, 1, 6)
         style.pair_spacing = _clamp(style.pair_spacing, 0, 200)
+        style.title_size = _clamp(style.title_size, 8, 300)
+        style.meta_size = _clamp(style.meta_size, 8, 300)
         style.box_opacity = _clamp(style.box_opacity, 0, 1)
         # Textbox frei verschiebbar, aber mindestens 50 px groß und innerhalb der Folie.
         style.margin_top = _clamp(style.margin_top, 0, SLIDE_H - 50)
@@ -295,15 +306,18 @@ def _fs(size: float) -> int:
 
 
 def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = None) -> str:
-    """paragraphs: Liste aus (Art, Text) mit Art in main / trans / spacer.
+    """paragraphs: Liste aus (Art, Text) mit Art in main / trans / spacer, auf der Titelfolie title / meta / gap.
 
     Aufbau wie von ProPresenter/Cocoa erzeugt: f0 = Hauptschrift, f1 = Helvetica (Rücksetzen),
-    f2 = Übersetzungsschrift; cf1/cf2 = Textfarben.
+    f2 = Übersetzungsschrift, f3 = Schrift der Liedangaben (nur auf der Titelfolie); cf1/cf2 = Textfarben.
     """
     style = style or ExportStyle()
     if not paragraphs:
         return _RTF_EMPTY
     m, t = style.main, style.translation
+    title = replace(m, size=style.title_size)
+    meta = replace(m, size=style.meta_size, bold=False, italic=False, uppercase=False)
+    has_meta = any(kind == "meta" for kind, _ in paragraphs)
     fam = lambda ts: FONTS.get(ts.font, FONTS["Helvetica"])[1]
     colors = [m.color] + ([t.color] if t.color != m.color else [])
     cf_main, cf_trans = 1, (1 if t.color == m.color else 2)
@@ -313,7 +327,8 @@ def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = Non
         "\\cocoatextscaling0\\cocoaplatform0{\\fonttbl"
         f"\\f0\\f{fam(m)}\\fcharset0 {m.postscript()};"
         "\\f1\\fswiss\\fcharset0 Helvetica;"
-        f"\\f2\\f{fam(t)}\\fcharset0 {t.postscript()};\n}}\n"
+        f"\\f2\\f{fam(t)}\\fcharset0 {t.postscript()};"
+        + (f"\\f3\\f{fam(meta)}\\fcharset0 {meta.postscript()};" if has_meta else "") + "\n}\n"
         "{\\colortbl;" + "".join("\\red%d\\green%d\\blue%d;" % _rgb(c) for c in colors) + "}\n"
         "{\\*\\expandedcolortbl;" + ";" * len(colors) + "}\n"
     )
@@ -329,13 +344,18 @@ def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = Non
         "trans": start_reset(t, "\\f2", cf_trans),
         "spacer": (f"\\fs{_fs(style.pair_spacing)} \\cf1 \\expnd0\\expndtw0\\kerning0\n",
                    "\\fs24 \\cf0 \\kerning1\\expnd0\\expndtw0 \\\n"),
+        "title": start_reset(title, "\\f0", cf_main),
+        "meta": start_reset(meta, "\\f3", cf_main),
+        "gap": (f"\\fs{_fs(style.meta_size * 0.6)} \\cf1 \\expnd0\\expndtw0\\kerning0\n",
+                "\\fs24 \\cf0 \\kerning1\\expnd0\\expndtw0 \\\n"),
     }
+    text_styles = {"main": m, "trans": t, "title": title, "meta": meta}
     para = f"\\pard{_ALIGN[style.align][0]}\\partightenfactor0\n\n"
     parts = [header]
     for i, (kind, text) in enumerate(paragraphs):
         start, reset = styles[kind]
-        ts = m if kind == "main" else t
-        body = "\\'a0" if kind == "spacer" else rtf_escape(text.upper() if ts.uppercase else text)
+        ts = text_styles.get(kind)
+        body = "\\'a0" if ts is None else rtf_escape(text.upper() if ts.uppercase else text)
         parts.append(para + start + body)
         parts.append("}" if i == len(paragraphs) - 1 else "\n" + reset)
     return "".join(parts)
@@ -358,8 +378,21 @@ def _chunks(items: list, size: int) -> list[list]:
     return out
 
 
+def cue_line(line: str) -> str | None:
+    """Regiehinweis in Klammern allein auf der Zeile? -> Abschnittstyp („Bridge“) bzw. "" für „(REPEAT)“,
+    None = Liedtext (auch „(We sing)“ oder „(Ich bin frei!)“ – nur bekannte Wörter gelten als Hinweis)."""
+    m = _CUE_LINE_RE.match(line)
+    if not m:
+        return None
+    word = re.sub(r"\s*\d*\s*[x×]$", "", m.group(1).casefold()).strip()  # „Chorus 2x“, „2x“
+    word = re.sub(r"\s*\d+[a-z]?$", "", word).strip()  # „Bridge 2“
+    if word in LABEL_TYPES:
+        return LABEL_TYPES[word]
+    return "" if word in _CUE_DIRECTIONS else None
+
+
 def section_slides(section: Section, lang_count: int, style: ExportStyle) -> list[list[tuple[str, str]]]:
-    lines = [ln for ln in section.lines if ln.strip()]
+    lines = [ln for ln in section.lines if ln.strip() and cue_line(ln) is None]
     if lang_count >= 2:
         pairs = [lines[i:i + lang_count] for i in range(0, len(lines), lang_count)]
         slides = []
@@ -393,12 +426,39 @@ def group_names(labels: list[str]) -> dict[str, str]:
     return names
 
 
-def arrangement_notes(order: list[str]) -> str:
-    """Kurzform der Reihenfolge wie im Beispiel: „V1 - V2 - CHO - V3 - CHO 2x“."""
+def section_labels(song: Song) -> dict[str, str]:
+    """.sng-Abschnitt -> Name, nach dem die Gruppe benannt wird.
+
+    Meist derselbe; „Misc 1“, dessen erste Zeile „(Bridge)“ ist, wird zu „Bridge 1“ (nächste freie Nummer),
+    damit die Abschnittsangabe nach dem Entfernen der Hinweiszeile in ProPresenter erhalten bleibt.
+    """
+    def canon(label: str) -> str:
+        num = re.search(r"(\d+[a-z]?)$", label)
+        return f"{section_type(label)} {num.group(1) if num else 1}"
+
+    taken = {canon(s.label) for s in song.sections}
+    out = {}
+    for sec in song.sections:
+        out[sec.label] = sec.label
+        if section_type(sec.label) != "Misc":
+            continue
+        kind = cue_line(next((ln for ln in sec.lines if ln.strip()), ""))
+        if kind:
+            n = 1
+            while canon(f"{kind} {n}") in taken:
+                n += 1
+            taken.add(canon(f"{kind} {n}"))
+            out[sec.label] = f"{kind} {n}"
+    return out
+
+
+def arrangement_notes(order: list[str], labels: dict[str, str] | None = None) -> str:
+    """Kurzform der Reihenfolge wie im Beispiel: „V1 - V2 - CHO - V3 - CHO 2x“. labels: siehe section_labels."""
     parts: list[list] = []
     for lbl in order:
         if lbl in (BLANK_LABEL, TITLE_LABEL):
             continue
+        lbl = (labels or {}).get(lbl, lbl)
         t = section_type(lbl)
         num = re.search(r"(\d+)$", lbl)
         abbr = NOTE_ABBR.get(t, t.upper())
@@ -419,6 +479,21 @@ class Group:
     slides: list[list[tuple[str, str]]]
 
 
+def title_slide(song: Song, style: ExportStyle) -> list[tuple[str, str]]:
+    """Titel groß, darunter (wenn eingeschaltet) Autor sowie Copyright und CCLI-Nummer klein."""
+    paras = [("title", song.title.strip())]
+    if style.title_meta:
+        rights = " · ".join(filter(None, [
+            f"© {song.copyright.strip()}" if song.copyright.strip() else "",
+            f"CCLI {song.ccli.strip()}" if song.ccli.strip() else "",
+        ]))
+        meta = [x for x in (" ".join(song.author.split()), rights) if x]
+        if meta:
+            paras.append(("gap", ""))
+            paras.extend(("meta", x) for x in meta)
+    return paras
+
+
 def song_groups(song: Song, style: ExportStyle) -> tuple[list[Group], list[str]]:
     """Gruppen (in Reihenfolge des ersten Auftretens) + Arrangement-Reihenfolge (Labels).
 
@@ -426,19 +501,21 @@ def song_groups(song: Song, style: ExportStyle) -> tuple[list[Group], list[str]]
     """
     labels = [s.label for s in song.sections]
     order = [l for l in song.order if l in labels] or labels
-    names = group_names(labels)
+    shown = section_labels(song)
+    by_shown = group_names(list(shown.values()))
+    names = {lbl: by_shown[shown[lbl]] for lbl in labels}
     seen: list[str] = []
     for lbl in order + labels:  # nicht verwendete Abschnitte hinten an
         if lbl not in seen:
             seen.append(lbl)
     by_label = {s.label: s for s in song.sections}
     groups = [
-        Group(lbl, names[lbl], GROUP_COLORS.get(section_type(lbl), (0.5, 0.5, 0.5)),
+        Group(lbl, names[lbl], GROUP_COLORS.get(section_type(shown[lbl]), (0.5, 0.5, 0.5)),
               section_slides(by_label[lbl], song.lang_count, style))
         for lbl in seen
     ]
     if style.title_slide and song.title.strip():
-        groups.insert(0, Group(TITLE_LABEL, TITLE_NAME, TITLE_COLOR, [[("main", song.title.strip())]]))
+        groups.insert(0, Group(TITLE_LABEL, TITLE_NAME, TITLE_COLOR, [title_slide(song, style)]))
         order = [TITLE_LABEL] + order
     if style.blank_first:
         groups.insert(0, Group(BLANK_LABEL, BLANK_NAME, BLANK_COLOR, [[]]))
@@ -500,6 +577,13 @@ class Template:
         return cue
 
 
+def title_style(style: ExportStyle) -> ExportStyle:
+    """Formatierung der Titelfolie: mit title_center gleiche Breite wie der Liedtext, aber senkrecht mittig auf der Folie."""
+    if not style.title_center:
+        return style
+    return replace(style, margin_top=0, margin_bottom=0, valign="middle")
+
+
 _template: Template | None = None
 
 
@@ -522,13 +606,14 @@ def song_to_presentation(song: Song, style: ExportStyle | None = None, key: str 
     style = style or ExportStyle()
     tpl = get_template()
     cue_tpl = tpl.styled_cue(style)
+    title_tpl = tpl.styled_cue(title_style(style))
     pres = copy.deepcopy(tpl.base)
     key = key or song.title or "Lied"
     pres.uuid.string = _uid(key)
     pres.name = name or song.title
 
     groups, order = song_groups(song, style)
-    pres.notes = arrangement_notes(order)
+    pres.notes = arrangement_notes(order, section_labels(song))
 
     group_ids = {}
     for grp in groups:
@@ -543,7 +628,7 @@ def song_to_presentation(song: Song, style: ExportStyle | None = None, key: str 
 
         for n, paras in enumerate(grp.slides):
             cue = pres.cues.add()
-            cue.CopyFrom(cue_tpl)
+            cue.CopyFrom(title_tpl if grp.label == TITLE_LABEL else cue_tpl)
             hk = hotkey_for(grp.name, style) if n == 0 else ""
             if hk:  # wie im Beispiel: nur die erste Folie einer Gruppe
                 cue.hot_key.code = hotKey_pb2.HotKey.KeyCode.Value(f"KEY_CODE_ANSI_{hk}")
@@ -596,9 +681,9 @@ def preview(song: Song, style: ExportStyle) -> dict:
     by_label = {g.label: g for g in groups}
     return {
         "title": song.title,
-        "notes": arrangement_notes(order),
+        "notes": arrangement_notes(order, section_labels(song)),
         "groups": [
-            {"name": g.name, "hotkey": hotkey_for(g.name, style),
+            {"name": g.name, "hotkey": hotkey_for(g.name, style), "title": g.label == TITLE_LABEL,
              "color": "#%02x%02x%02x" % tuple(int(v * 255) for v in g.color),
              "slides": [[{"kind": k, "text": t} for k, t in s] for s in g.slides]}
             for g in (by_label[lbl] for lbl in order)
