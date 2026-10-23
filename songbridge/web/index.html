@@ -2099,8 +2099,8 @@ function renderSettingsCt() {
     box.innerHTML = `<div class="status-box"><div><b>Angemeldet als ${esc(ctState.user)}</b><br>
         <span class="muted" style="font-size:13px">${esc(ctState.url)}</span></div>
         <button class="btn small" id="ct-logout">Abmelden</button></div>
-      ${cfg.ctTokenSaved ? `<p class="muted" style="font-size:13px">Ein Login-Token ist gespeichert – beim Start meldet sich das Programm automatisch an.
-        <button class="linkbtn" id="ct-forget">Token löschen</button></p>` : ""}`;
+      ${cfg.ctTokenSaved || cfg.ctPasswordSaved ? `<p class="muted" style="font-size:13px">${cfg.ctTokenSaved ? "Ein Login-Token" : "Das Passwort"} ist gespeichert – beim Start meldet sich das Programm automatisch an.
+        <button class="linkbtn" id="ct-forget">Gespeicherte Anmeldung löschen</button></p>` : ""}`;
     $("#ct-logout").onclick = async () => {
       ctState = await api("/api/ct/logout", {method: "POST", body: {}});
       events = []; renderCtBox(); renderEvents(); renderSettingsCt();
@@ -2113,15 +2113,18 @@ function renderSettingsCt() {
         <div class="field"><label for="ct-pass">Passwort</label><input type="password" id="ct-pass" autocomplete="current-password"></div>
       </div>
       <div class="field"><label for="ct-totp">Zwei-Faktor-Code (nur falls aktiviert)</label><input type="text" id="ct-totp" inputmode="numeric" autocomplete="one-time-code"></div>
+      <label class="check" style="font-size:13px"><input type="checkbox" id="ct-remember-pass" checked> Passwort speichern und künftig automatisch anmelden (auch nach einem Neustart)</label>
       <details class="token"><summary>Stattdessen mit Login-Token anmelden</summary>
         <div class="field"><input type="password" id="ct-token" placeholder="Login-Token"></div>
         <label class="check" style="font-size:13px"><input type="checkbox" id="ct-remember"> Token speichern und künftig automatisch anmelden</label>
       </details>
       <div class="btn-row"><button class="btn primary" id="ct-login">Anmelden</button>
-        ${cfg.ctTokenSaved ? '<button class="btn small" id="ct-forget">Gespeicherten Token löschen</button>' : ""}</div>
+        ${cfg.ctTokenSaved || cfg.ctPasswordSaved ? '<button class="btn small" id="ct-forget">Gespeicherte Anmeldung löschen</button>' : ""}</div>
       <div id="ct-msg" style="margin-top:8px"></div>
-      <p class="muted" style="font-size:12px;margin-bottom:0">Das Passwort wird nicht gespeichert, nur Adresse und Benutzername (in <code>app_settings.json</code>).
-        Die Anmeldung gilt, bis das Programm beendet wird.</p>`;
+      <p class="muted" style="font-size:12px;margin-bottom:0">Adresse und Benutzername stehen in <code>app_settings.json</code>.
+        Das Passwort wird nur mit Häkchen gespeichert – im Schlüsselbund des Computers (macOS-Schlüsselbund bzw.
+        Windows-Anmeldeinformationsverwaltung). Ohne Häkchen gilt die Anmeldung, bis das Programm beendet wird.
+        Bei Zwei-Faktor-Anmeldung klappt das automatische Anmelden nur mit einem gespeicherten Login-Token.</p>`;
     $("#ct-url").value = cfg.ctUrl || cfg.defaultUrl;
     $("#ct-user").value = cfg.ctUser || "";
     ["#ct-pass", "#ct-totp", "#ct-token"].forEach(s => $(s).onkeydown = e => { if (e.key === "Enter") ctLogin(); });
@@ -2133,7 +2136,8 @@ function renderSettingsCt() {
 
 async function ctLogin() {
   const body = {url: $("#ct-url").value, user: $("#ct-user").value, password: $("#ct-pass").value,
-                totp: $("#ct-totp").value, token: $("#ct-token").value, remember: $("#ct-remember").checked};
+                totp: $("#ct-totp").value, token: $("#ct-token").value, remember: $("#ct-remember").checked,
+                rememberPassword: $("#ct-remember-pass").checked};
   const btn = $("#ct-login");
   btn.disabled = true; btn.textContent = "Anmelden …"; $("#ct-msg").innerHTML = "";
   try {

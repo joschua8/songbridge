@@ -3,6 +3,8 @@
 # (aus dem Projektordner aufrufen)
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
+
 ROOT = Path(SPECPATH).parent
 PKG = ROOT / "songbridge"
 PROTO = PKG / "propresenter" / "proto"
@@ -16,9 +18,10 @@ a = Analysis(
         (str(PKG / "web"), "songbridge/web"),
         (str(PKG / "resources"), "songbridge/resources"),
         (str(PROTO / "LICENSE-ProPresenter7-Proto"), "songbridge/propresenter/proto"),
+        *copy_metadata("keyring"),  # keyring findet seine Backends (Schlüsselbund) über die Paket-Metadaten
     ],
     # songbridge/version.py schreibt der Build (fehlt beim Start aus dem Quellcode)
-    hiddenimports=pb2 + ["songbridge.version"],
+    hiddenimports=pb2 + ["songbridge.version"] + collect_submodules("keyring.backends"),
     excludes=["tkinter"],
 )
 pyz = PYZ(a.pure)

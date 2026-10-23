@@ -34,7 +34,7 @@ import requests
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
 from songbridge import churchtools as dl
-from songbridge import paths, updater
+from songbridge import credentials, paths, updater
 from songbridge.propresenter import export as pro_export
 from songbridge.propresenter import playlist
 from songbridge.propresenter import sync as pp_sync
@@ -424,8 +424,8 @@ def save_app_settings(**changes) -> dict:
 class CTSession:
     """Angemeldeter ChurchTools-Client im Speicher dieses (nur lokal erreichbaren) Servers.
 
-    Das Passwort wird nie gespeichert. Ist in den Einstellungen ein Login-Token hinterlegt,
-    meldet sich der Server damit bei Bedarf selbst an.
+    Ist in den Einstellungen ein Login-Token hinterlegt oder das Passwort gespeichert (Schlüsselbund,
+    credentials.py), meldet sich der Server damit bei Bedarf selbst an – auch nach einem Neustart.
     """
 
     def __init__(self):
@@ -439,29 +439,50 @@ class CTSession:
         with self.lock:
             self.client, self.user, self.auto_error = client, user, ""
 
+    @staticmethod
+    def _saved_login(cfg: dict) -> tuple[str, str]:
+        """-> (Art, Geheimnis): gespeicherter Token hat Vorrang vor dem gespeicherten Passwort."""
+        if cfg["ct_token"]:
+            return "token", cfg["ct_token"]
+        password = credentials.load_password(cfg["ct_url"], cfg["ct_user"])
+        return ("password", password) if password else ("", "")
+
+    def _attempt_key(self, cfg: dict) -> str:
+        kind, secret = self._saved_login(cfg)
+        return f"{kind}:{secret}:{cfg['ct_user']}@{cfg['ct_url']}" if kind else ""
+
     def clear(self, manual: bool = False) -> None:
-        """manual: vom Benutzer abgemeldet -> nicht gleich wieder automatisch mit dem Token anmelden."""
-        cfg = load_app_settings()
+        """manual: vom Benutzer abgemeldet -> nicht gleich wieder automatisch anmelden."""
+        key = self._attempt_key(load_app_settings()) if manual else ""
         with self.lock:
             self.client, self.user = None, ""
-            self._auto_tried = cfg["ct_token"] + cfg["ct_url"] if manual else ""
+            self._auto_tried = key
 
     def get(self) -> dl.ChurchToolsClient | None:
-        """Aktueller Client; meldet sich mit gespeichertem Token an, falls nötig (einmal pro Token)."""
+        """Aktueller Client; meldet sich mit gespeichertem Token/Passwort an, falls nötig (einmal je Zugangsdaten)."""
         with self.lock:
             if self.client is not None:
                 return self.client
         cfg = load_app_settings()
-        token = cfg["ct_token"]
-        if not token or self._auto_tried == token + cfg["ct_url"]:
+        kind, secret = self._saved_login(cfg)
+        key = self._attempt_key(cfg)
+        if not kind or self._auto_tried == key:
             return None
-        self._auto_tried = token + cfg["ct_url"]
+        self._auto_tried = key
         try:
             client = dl.ChurchToolsClient(cfg["ct_url"] or dl.DEFAULT_URL)
-            self.set(client, client.login_with_token(token))
+            if kind == "token":
+                name = client.login_with_token(secret)
+            else:
+                # Beim automatischen Anmelden kann niemand einen Zwei-Faktor-Code eingeben -> bei aktivierter 2FA schlägt das fehl (Hinweis unten).
+                name = client.login_with_password(cfg["ct_user"], secret, get_totp=lambda: "")
+            self.set(client, name)
             return client
         except (dl.ChurchToolsError, requests.RequestException) as exc:
-            self.auto_error = f"Anmeldung mit gespeichertem Token fehlgeschlagen: {exc}"
+            what = "Token" if kind == "token" else "Passwort"
+            hint = (" – bei Zwei-Faktor-Anmeldung bitte einen Login-Token speichern."
+                    if "Zwei-Faktor" in str(exc) else "")
+            self.auto_error = f"Anmeldung mit gespeichertem {what} fehlgeschlagen: {exc}{hint}"
             return None
 
     def status(self) -> dict:
@@ -526,8 +547,17 @@ def ct_login():
         return _ct_error(exc, data.get("url") or "")
     ct.set(client, name)
     token = (data.get("token") or "").strip()
-    save_app_settings(ct_url=client.base_url, ct_user=(data.get("user") or "").strip() or load_app_settings()["ct_user"],
+    user = (data.get("user") or "").strip()
+    old = load_app_settings()
+    save_app_settings(ct_url=client.base_url, ct_user=user or old["ct_user"],
                       **({"ct_token": token} if token and data.get("remember") else {}))
+    if not token:
+        if old["ct_user"] and (old["ct_user"], old["ct_url"]) != (user, client.base_url):
+            credentials.delete_password(old["ct_url"], old["ct_user"])  # anderer Benutzer/Adresse
+        if data.get("rememberPassword"):
+            credentials.save_password(client.base_url, user, data.get("password") or "")
+        else:
+            credentials.delete_password(client.base_url, user)
     return jsonify(ct.status())
 
 
@@ -535,14 +565,22 @@ def ct_login():
 def ct_logout():
     ct.clear(manual=True)
     if (request.get_json(silent=True) or {}).get("forget"):
-        save_app_settings(ct_token="")
+        _forget_login()
     return jsonify(ct.status())
+
+
+def _forget_login() -> None:
+    """Gespeicherten Token und gespeichertes Passwort löschen."""
+    cfg = load_app_settings()
+    credentials.delete_password(cfg["ct_url"], cfg["ct_user"])
+    save_app_settings(ct_token="")
 
 
 @app.get("/api/settings")
 def get_settings():
     cfg = load_app_settings()
     return jsonify({"ctUrl": cfg["ct_url"], "ctUser": cfg["ct_user"], "ctTokenSaved": bool(cfg["ct_token"]),
+                    "ctPasswordSaved": bool(credentials.load_password(cfg["ct_url"], cfg["ct_user"])),
                     "songsDir": str(SONGS_DIR), "defaultUrl": dl.DEFAULT_URL, "ct": ct.status()})
 
 
@@ -555,7 +593,7 @@ def put_settings():
     if isinstance(data.get("ctUser"), str):
         changes["ct_user"] = data["ctUser"]
     if data.get("forgetToken"):
-        changes["ct_token"] = ""
+        _forget_login()
     save_app_settings(**changes)
     return get_settings()
 

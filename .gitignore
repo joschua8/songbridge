@@ -9,3 +9,7 @@ playlist_settings.json
 .idea/
 .venv/
 .DS_Store
+
+# Jira-Skript: Zugangsdaten und abgerufene Tickets
+tools/jira/.jira.env
+tickets/
