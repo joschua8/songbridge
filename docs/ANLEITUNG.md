@@ -47,6 +47,12 @@ Ein anderer Ort lässt sich über die Umgebungsvariable `SONGBRIDGE_DATA` einste
 Die ProPresenter-Bibliothek, den Ordner mit den Stille-Bildern und die ChurchTools-Anmeldung
 stellst du in der Oberfläche unter **Einstellungen** ein.
 
+Mit dem Häkchen **„Passwort speichern“** beim Anmelden merkt sich SongBridge das ChurchTools-Passwort im
+Schlüsselbund des Computers (macOS-Schlüsselbund bzw. Windows-Anmeldeinformationsverwaltung) und meldet sich
+bei jedem Start – auch nach einem Neustart des Computers – automatisch an. Unter Einstellungen lässt sich die
+gespeicherte Anmeldung wieder löschen. Ist bei ChurchTools die Zwei-Faktor-Anmeldung aktiv, geht das automatische
+Anmelden nur mit einem gespeicherten Login-Token.
+
 ## Lieder ohne ChurchTools hinzufügen
 
 Unter **Lieder → Hochladen** Dateien aus CCLI SongSelect (`.usr` oder `.txt`) oder SongBeamer-Dateien
