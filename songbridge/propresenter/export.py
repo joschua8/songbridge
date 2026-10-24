@@ -29,7 +29,7 @@ from pathlib import Path
 from songbridge.paths import DATA_DIR, RES_DIR
 from songbridge.propresenter import formatter, proto  # noqa: F401  (proto: pb2-Module in den Suchpfad)
 from songbridge.propresenter.formatter import parse_presentation, presentation_to_json
-from songbridge.songs.sng import LABEL_TYPES, Section, Song, read_sng
+from songbridge.songs.sng import LABEL_TYPES, Section, Song, paragraphs, read_sng
 
 import graphicsData_pb2  # noqa: E402
 import hotKey_pb2  # noqa: E402
@@ -131,6 +131,7 @@ class TextStyle:
 @dataclass
 class ExportStyle:
     """Alle einstellbaren Formatierungen. Standard = resources/BeispielZielFormatierung.json."""
+    slide_break: str = "lines"    # lines: nach Zeilenzahl / paragraph: je Absatz der Vorlage eine Folie
     lines_per_slide: int = 4      # einsprachig
     pairs_per_slide: int = 2      # zweisprachig (Original + Übersetzung)
     main: TextStyle = field(default_factory=TextStyle)
@@ -189,10 +190,17 @@ class ExportStyle:
             style.align = "center"
         if style.valign not in _VALIGN:
             style.valign = "bottom"
+        if style.slide_break not in ("lines", "paragraph"):
+            style.slide_break = "lines"
         return style
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @property
+    def scale_down(self) -> bool:
+        """Schrift verkleinern, wenn der Text nicht in die Box passt – beim Umbruch nach Absatz immer."""
+        return self.shrink_to_fit or self.slide_break == "paragraph"
 
 
 def _coerce(value, default):
@@ -391,20 +399,38 @@ def cue_line(line: str) -> str | None:
     return "" if word in _CUE_DIRECTIONS else None
 
 
+def _pair_slide(chunk: list[list[str]], style: ExportStyle) -> list[tuple[str, str]]:
+    paras: list[tuple[str, str]] = []
+    for j, pair in enumerate(chunk):
+        if j and style.pair_spacing > 0:
+            paras.append(("spacer", ""))
+        paras.append(("main", pair[0]))
+        paras.extend(("trans", t) for t in pair[1:2])
+    return paras
+
+
 def section_slides(section: Section, lang_count: int, style: ExportStyle) -> list[list[tuple[str, str]]]:
+    """Folien eines Abschnitts.
+
+    lines:     gleichmäßig nach Zeilen (bzw. Zeilenpaaren) pro Folie aufteilen, Absätze egal.
+    paragraph: jeder Absatz der Vorlage (SongBeamer-Folie „--“, Leerzeile, Freitext „--“) wird eine Folie,
+               egal wie lang – zu langer Text wird beim Abspielen verkleinert (ExportStyle.scale_down).
+    """
+    if style.slide_break == "paragraph":
+        slides = []
+        for para in paragraphs(section.lines):
+            lines = [ln for ln in para if cue_line(ln) is None]
+            if not lines:
+                continue
+            if lang_count >= 2:
+                slides.append(_pair_slide([lines[i:i + lang_count] for i in range(0, len(lines), lang_count)], style))
+            else:
+                slides.append([("main", ln) for ln in lines])
+        return slides or [[]]
     lines = [ln for ln in section.lines if ln.strip() and cue_line(ln) is None]
     if lang_count >= 2:
         pairs = [lines[i:i + lang_count] for i in range(0, len(lines), lang_count)]
-        slides = []
-        for chunk in _chunks(pairs, style.pairs_per_slide):
-            paras: list[tuple[str, str]] = []
-            for j, pair in enumerate(chunk):
-                if j and style.pair_spacing > 0:
-                    paras.append(("spacer", ""))
-                paras.append(("main", pair[0]))
-                paras.extend(("trans", t) for t in pair[1:2])
-            slides.append(paras)
-        return slides
+        return [_pair_slide(chunk, style) for chunk in _chunks(pairs, style.pairs_per_slide)]
     return [[("main", ln) for ln in chunk] for chunk in _chunks(lines, style.lines_per_slide)]
 
 
@@ -573,7 +599,7 @@ class Template:
                 graphicsData_pb2.Graphics.Text.Attributes.Paragraph.Alignment.Value(_ALIGN[style.align][1]))
             text.shadow.enable = style.shadow
             text.scale_behavior = graphicsData_pb2.Graphics.Text.ScaleBehavior.Value(
-                "SCALE_BEHAVIOR_SCALE_FONT_DOWN" if style.shrink_to_fit else "SCALE_BEHAVIOR_NONE")
+                "SCALE_BEHAVIOR_SCALE_FONT_DOWN" if style.scale_down else "SCALE_BEHAVIOR_NONE")
         return cue
 
 

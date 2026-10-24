@@ -14,6 +14,9 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+PARA_MARK = "--"  # Freitext: Folienumbruch innerhalb eines Abschnitts
+_PARA_RE = re.compile(r"^-{2,3}$")
+
 # Kennzeichnet von Hand erfasste Lieder; der ChurchTools-Import überschreibt sie nie.
 MANUAL_EDITOR = "Liederverwaltung (manuell)"  # früherer Programmname – Kennung in vorhandenen Dateien, nicht ändern
 # Kopfzeile in ChurchTools-Liedern, die in SongBridge bearbeitet wurden (Wert: Datum). Der Import überschreibt sie nicht.
@@ -69,7 +72,7 @@ _NUMBERED_RE = re.compile(r"^\s*(\d{1,2})[.)]\s+(\S.*)$")
 @dataclass
 class Section:
     label: str
-    lines: list[str]
+    lines: list[str]  # eine Leerzeile = Absatz-/Folienumbruch innerhalb des Abschnitts
 
 
 @dataclass
@@ -177,8 +180,8 @@ def _add_unlabeled(song: Song, parsed: list[tuple[str | None, list[str]]]) -> No
             named = Section(label, list(lines))
             song.sections.append(named)
             sequence.append(label)
-        elif named is not None:
-            named.lines.extend(lines)
+        elif named is not None:  # weitere Folie („--“/„---“ ohne Namen) -> Absatzgrenze merken
+            named.lines.extend(([""] if named.lines else []) + lines)
         elif (key := _norm_lines(lines)) in generated:
             sequence.append(generated[key].label)
         else:
@@ -286,6 +289,12 @@ def parse_freetext(text: str) -> tuple[list[Section], list[str], list[str]]:
 
     for block in blocks:
         lines = [ln.strip() for ln in block.split("\n") if ln.strip()]
+        # „--“ allein auf einer Zeile = Folienumbruch innerhalb des Abschnitts (intern Leerzeile)
+        lines = ["" if _PARA_RE.match(ln) else ln for ln in lines]
+        while lines and not lines[0]:
+            lines.pop(0)
+        if not lines:
+            continue
         kind, number = None, None
 
         m = _LABEL_RE.match(lines[0])
@@ -298,6 +307,7 @@ def parse_freetext(text: str) -> tuple[list[Section], list[str], list[str]]:
             if m:
                 kind, number = "Verse", int(m.group(1))
                 lines = [m.group(2)] + lines[1:]
+        lines = _trim_marks(lines)
 
         if kind is None:
             same = by_lines(lines)
@@ -388,8 +398,38 @@ def song_to_freetext(song: Song) -> str:
 
 
 def _text_lines(section: Section) -> list[str]:
-    # Leerzeilen innerhalb eines Abschnitts (kommen in ChurchTools-Dateien vor) würden ihn im Freitext teilen.
-    return [ln for ln in section.lines if ln.strip()]
+    # Leerzeilen innerhalb eines Abschnitts (Absatz-/Folienumbruch) würden ihn im Freitext teilen -> „--“.
+    out: list[str] = []
+    for ln in section.lines:
+        if ln.strip():
+            out.append(ln)
+        elif out and out[-1] != PARA_MARK:
+            out.append(PARA_MARK)
+    while out and out[-1] == PARA_MARK:
+        out.pop()
+    return out
+
+
+def _trim_marks(lines: list[str]) -> list[str]:
+    """Absatzmarker (Leerzeilen) am Anfang/Ende entfernen und doppelte zusammenfassen."""
+    out: list[str] = []
+    for ln in lines:
+        if ln.strip() or (out and out[-1].strip()):
+            out.append(ln)
+    while out and not out[-1].strip():
+        out.pop()
+    return out
+
+
+def paragraphs(lines: list[str]) -> list[list[str]]:
+    """Abschnittszeilen -> Absätze (an Leerzeilen getrennt, leere Absätze entfallen)."""
+    out: list[list[str]] = [[]]
+    for ln in lines:
+        if ln.strip():
+            out[-1].append(ln)
+        elif out[-1]:
+            out.append([])
+    return [p for p in out if p]
 
 
 def _norm_lines(lines: list[str]) -> str:

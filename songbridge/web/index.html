@@ -380,6 +380,8 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
             <li><b>Wiederholung:</b> nur den Namen als eigenen Abschnitt schreiben (z. B. <code>Refrain</code> mit Leerzeile davor und danach) –
               den Text nicht noch einmal abtippen. Kein „2x“ oder „(Refrain)“ in die Liedzeilen schreiben.</li>
             <li>Jede Zeile hier = eine Zeile auf der Folie. Lange Zeilen lieber teilen; Folien werden automatisch nach „Zeilen pro Folie“ aufgeteilt.</li>
+            <li><b>Eigene Folienumbrüche:</b> <code>--</code> allein in einer Zeile beginnt innerhalb eines Abschnitts eine neue Folie.
+              Wirkt beim Export mit „Folienumbruch: Absatz“ (ProPresenter → Formatierung).</li>
             <li>Ohne Namen gilt ein Abschnitt als nächste Strophe; <code>1. Text …</code> am Anfang = Strophe 1. Keine Akkorde.</li>
           </ul>
           <pre>Strophe 1
@@ -1123,6 +1125,7 @@ $("#x-none").onclick = () => { xVisible().forEach(s => xSel.delete(s.id)); saveS
 let style = null, styleDefaults = null, fonts = [];
 const STYLE_FORM = [
   ["Folie", [
+    ["slide_break", "Folienumbruch", "seg", [["lines", "Zeilenzahl"], ["paragraph", "Absatz"]]],
     ["lines_per_slide", "Zeilen pro Folie", "number", {min: 1, max: 12}],
     ["pairs_per_slide", "Zeilenpaare (zweisprachig)", "number", {min: 1, max: 6}],
     ["background", "Hintergrund", "color"],
@@ -1224,6 +1227,17 @@ function fillStyleForm() {
     const v = getPath(style, el.dataset.k);
     if (el.type === "checkbox") el.checked = v; else el.value = v;
   });
+  // Umbruch nach Absatz: Zeilenzahl spielt keine Rolle, Verkleinern ist immer an.
+  const para = style.slide_break === "paragraph";
+  ["lines_per_slide", "pairs_per_slide", "shrink_to_fit"].forEach(k => {
+    const el = $(`#st-form [data-k="${k}"]`);
+    if (!el) return;
+    el.disabled = para;
+    el.closest(".st-row").style.opacity = para ? .5 : "";
+    el.closest(".st-row").title = para ? "Beim Folienumbruch nach Absatz: jeder Absatz eine Folie, zu langer Text wird automatisch verkleinert" : "";
+  });
+  const sh = $('#st-form [data-k="shrink_to_fit"]');
+  if (sh && para) sh.checked = true;
   $("#st-form").querySelectorAll(".seg").forEach(seg =>
     seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === getPath(style, seg.dataset.k))));
   $("#st-form").querySelectorAll(".toggles button").forEach(b => b.classList.toggle("on", !!getPath(style, b.dataset.k)));
@@ -1361,7 +1375,7 @@ function fitPreview() {
     content.style.setProperty("--k", 1);
     let k = 1;
     for (let i = 0; i < 4 && content.scrollHeight > box.clientHeight + 1; i++) {
-      if (!style.shrink_to_fit) break;
+      if (!style.shrink_to_fit && style.slide_break !== "paragraph") break;
       k *= box.clientHeight / content.scrollHeight;
       content.style.setProperty("--k", k.toFixed(3));
     }
