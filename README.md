@@ -23,7 +23,7 @@ und macht aus dem Ablaufplan eines Gottesdienstes mit einem Klick eine fertige P
 | **Lieder hochladen** | Lieder ohne `.sng` als CCLI-SongSelect-Datei (`.usr`/`.txt`) oder `.sng` per Drag & Drop hinzufügen. |
 | **Freitext** | Liedtext einfügen; Abschnitte (Strophe, Refrain, Bridge …) werden erkannt, Vorschau und Formathinweise inklusive. |
 | **Bearbeiten** | Jedes Lied (auch aus ChurchTools) als Freitext bearbeiten; der Import überschreibt bearbeitete Lieder nicht, das Original lässt sich wiederherstellen. |
-| **Export nach ProPresenter** | `.sng` → `.pro`, mit einstellbarer Formatierung (Schrift, Größe, Farben, Zeilen pro Folie, Textbox per Maus verschieben), Folienvorschau und Tastenkürzeln je Liedteil (Strophe 1 = A, Refrain = C, Bridge = B …). |
+| **Export nach ProPresenter** | `.sng` → `.pro`, mit einstellbarer Formatierung (Schrift, Größe, Farben, Folienumbruch nach Zeilenzahl oder nach Absatz mit automatischem Verkleinern, Textbox per Maus verschieben), Folienvorschau und Tastenkürzeln je Liedteil (Strophe 1 = A, Refrain = C, Bridge = B …). |
 | **Abgleich** | Vergleicht die Liederdatenbank mit deiner ProPresenter-Lieder-Bibliothek: was fehlt, was hat anderen Text – und aktualisiert auf Wunsch (mit Sicherung). |
 
 
