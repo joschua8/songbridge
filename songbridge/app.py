@@ -60,6 +60,7 @@ APP_SETTINGS_PATH = Path(os.environ.get("APP_SETTINGS", paths.DATA_DIR / "app_se
 BACKUP_DIR = Path(os.environ.get("PP_BACKUP_DIR", paths.DATA_DIR / "backup"))
 # Originalfassung bearbeiteter ChurchTools-Lieder (für „Original wiederherstellen“), gleicher relativer Pfad wie in songs/.
 ORIGINALS_DIR = paths.DATA_DIR / "backup" / "originale"
+REPLACED_DIR = paths.DATA_DIR / "backup" / "ersetzt"   # beim Hochladen/Erfassen ersetzte Lieder
 
 app = Flask(__name__, static_folder=None)
 
@@ -154,12 +155,50 @@ def _write_song(song: Song, target: Path) -> None:
     tmp.replace(target)
 
 
+CONFLICT_MODES = ("ask", "overwrite", "copy")
+
+
+def _new_song_target(title: str, mode: str) -> tuple[Path | None, str]:
+    """Zieldatei für ein neues Lied. -> (Pfad, Hinweis) oder (None, "") bei Namenskonflikt und mode=ask.
+
+    overwrite: vorhandenes Lied wird ersetzt (vorher nach backup/ersetzt/<Zeitstempel>/ gesichert);
+    copy: „Titel (2).sng“ usw.
+    """
+    target = SONGS_DIR / f"{dl.safe_filename(title)}.sng"
+    if not target.exists():
+        return target, ""
+    if mode == "overwrite":
+        stamp, n = time.strftime("%Y-%m-%d_%H%M%S"), 1
+        backup = REPLACED_DIR / stamp / target.relative_to(SONGS_DIR)
+        while backup.exists():  # mehrfach ersetzt in derselben Sekunde
+            n += 1
+            backup = REPLACED_DIR / f"{stamp}_{n}" / target.relative_to(SONGS_DIR)
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target, backup)
+        return target, f"Vorhandenes Lied „{target.stem}“ ersetzt (Sicherung in {backup.parent})."
+    if mode == "copy":
+        n = 2
+        while (candidate := target.with_name(f"{target.stem} ({n}).sng")).exists():
+            n += 1
+        return candidate, f"Als Kopie „{candidate.stem}“ gespeichert."
+    return None, ""
+
+
+def _conflict(title: str) -> dict:
+    existing = SONGS_DIR / f"{dl.safe_filename(title)}.sng"
+    return {"conflict": True, "existingId": existing.relative_to(SONGS_DIR).as_posix(),
+            "error": f"Es gibt bereits ein Lied „{existing.stem}“."}
+
+
 @app.post("/api/songs/upload")
 def upload_songs():
     """SongSelect-Dateien (.usr/.txt) oder .sng hochladen -> songs/<Titel>.sng.
 
-    Ergebnis je Datei: {file, ok, id?, title?, error?, warnings}. Vorhandene Lieder werden nicht überschrieben.
+    Ergebnis je Datei: {file, ok, id?, title?, error?, conflict?, warnings}. Gibt es das Lied schon, entscheidet
+    das Formularfeld `mode`: ask (Standard, nichts schreiben, conflict melden) | overwrite | copy.
     """
+    mode = request.form.get("mode", "ask")
+    mode = mode if mode in CONFLICT_MODES else "ask"
     results = []
     for f in request.files.getlist("files"):
         name = Path(f.filename or "").name
@@ -171,10 +210,12 @@ def upload_songs():
             res["error"] = str(exc)
             continue
         title = song.title if song else parse_sng(raw).title
-        target = SONGS_DIR / f"{dl.safe_filename(title)}.sng"
-        if target.exists():
-            res["error"] = f"Es gibt bereits ein Lied „{target.stem}“."
+        target, note = _new_song_target(title, mode)
+        if target is None:
+            res.update(_conflict(title))
             continue
+        if note:
+            warnings = [note, *warnings]
         if song:
             _write_song(song, target)
         else:
@@ -218,11 +259,13 @@ def freetext_create():
         return error("Bitte den Liedtext eingeben.")
     if song.ccli and not song.ccli.isdigit():
         return error("Die CCLI-Liednummer besteht nur aus Ziffern.")
-    target = SONGS_DIR / f"{dl.safe_filename(song.title)}.sng"
-    if target.exists():
-        return error(f"Es gibt bereits ein Lied „{target.stem}“. Bitte den Titel anpassen.", 409)
+    data = request.get_json(silent=True) or {}
+    target, note = _new_song_target(song.title, data.get("mode") if data.get("mode") in CONFLICT_MODES else "ask")
+    if target is None:
+        return jsonify(_conflict(song.title)), 409
     _write_song(song, target)
-    return jsonify({"id": target.relative_to(SONGS_DIR).as_posix(), "title": song.title, "warnings": warnings}), 201
+    return jsonify({"id": target.relative_to(SONGS_DIR).as_posix(), "title": song.title,
+                    "warnings": ([note] if note else []) + warnings}), 201
 
 
 @app.put("/api/songs/<path:song_id>")

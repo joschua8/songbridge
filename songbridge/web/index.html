@@ -653,7 +653,7 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), {data, status: res.status});
   return data;
 }
 
@@ -855,32 +855,73 @@ function select(id, scroll = true) {
 }
 
 /* ---------------- Hochladen ---------------- */
+// Ergebnisse der letzten Auswahl je Dateiname; bei Namenskonflikt wird nachgefragt (ersetzen / Kopie / überspringen).
+let upFiles = new Map(), upResults = new Map();
+
+async function postUpload(files, mode = "ask") {
+  const fd = new FormData();
+  files.forEach(f => fd.append("files", f));
+  fd.append("mode", mode);
+  const res = await fetch("/api/songs/upload", {method: "POST", body: fd});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  data.results.forEach(r => upResults.set(r.file, r));
+  if (data.results.some(r => r.ok)) await loadSongs();
+}
+
 async function uploadSongs(fileList) {
   const files = [...fileList];
   if (!files.length) return;
-  const fd = new FormData();
-  files.forEach(f => fd.append("files", f));
+  upFiles = new Map(files.map(f => [f.name, f]));
+  upResults = new Map();
   $("#up-results").innerHTML = '<li class="muted">Wird hochgeladen …</li>';
   try {
-    const res = await fetch("/api/songs/upload", {method: "POST", body: fd});
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    $("#up-results").innerHTML = data.results.map(r => `<li>${r.ok
-      ? `<span style="color:var(--ok)">✓</span> <a href="#" data-song="${esc(r.id)}">${esc(r.title)}</a> <span class="muted">(${esc(r.file)})</span>`
-      : `<span style="color:var(--danger)">✗</span> ${esc(r.file)}: ${esc(r.error)}`}${
-      (r.warnings || []).map(w => `<div class="muted" style="font-size:12px">${esc(w)}</div>`).join("")}</li>`).join("");
-    if (data.results.some(r => r.ok)) await loadSongs();
+    await postUpload(files);
+    renderUploads();
   } catch (err) {
     $("#up-results").innerHTML = `<li><div class="notice error">${esc(err.message)}</div></li>`;
   }
   $("#up-files").value = "";
 }
+
+function renderUploads() {
+  const rows = [...upResults.values()];
+  const conflicts = rows.filter(r => r.conflict);
+  $("#up-results").innerHTML = rows.map(r => {
+    const warn = (r.warnings || []).map(w => `<div class="muted" style="font-size:12px">${esc(w)}</div>`).join("");
+    if (r.ok) return `<li><span style="color:var(--ok)">✓</span> <a href="#" data-song="${esc(r.id)}">${esc(r.title)}</a> <span class="muted">(${esc(r.file)})</span>${warn}</li>`;
+    if (r.skipped) return `<li class="muted">– ${esc(r.file)}: übersprungen</li>`;
+    if (r.conflict) return `<li><span style="color:var(--warn)">!</span> ${esc(r.file)}: ${esc(r.error)}
+        <a href="#" data-song="${esc(r.existingId)}">vorhandenes ansehen</a>
+        <div class="btn-row" style="margin-top:4px">
+          <button class="btn small" data-up="overwrite" data-file="${esc(r.file)}">Trotzdem hochladen (ersetzen)</button>
+          <button class="btn small" data-up="copy" data-file="${esc(r.file)}">Als Kopie speichern</button>
+          <button class="btn small" data-up="skip" data-file="${esc(r.file)}">Überspringen</button></div>${warn}</li>`;
+    return `<li><span style="color:var(--danger)">✗</span> ${esc(r.file)}: ${esc(r.error)}${warn}</li>`;
+  }).join("") + (conflicts.length > 1 ? `<li><div class="btn-row"><span class="muted" style="font-size:13px">${conflicts.length} Lieder gibt es schon:</span>
+      <button class="btn small" data-up="overwrite" data-file="*">Alle ersetzen</button>
+      <button class="btn small" data-up="copy" data-file="*">Alle als Kopie</button>
+      <button class="btn small" data-up="skip" data-file="*">Alle überspringen</button></div></li>` : "");
+}
+
 $("#up-files").onchange = e => uploadSongs(e.target.files);
 const drop = $("#up-drop");
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); uploadSongs(e.dataTransfer.files); };
-$("#up-results").onclick = e => {
+$("#up-results").onclick = async e => {
+  const btn = e.target.closest("[data-up]");
+  if (btn) {
+    const names = btn.dataset.file === "*" ? [...upResults.values()].filter(r => r.conflict).map(r => r.file) : [btn.dataset.file];
+    if (btn.dataset.up === "skip") names.forEach(n => upResults.set(n, {file: n, skipped: true}));
+    else {
+      btn.disabled = true;
+      try { await postUpload(names.map(n => upFiles.get(n)).filter(Boolean), btn.dataset.up); }
+      catch (err) { names.forEach(n => upResults.set(n, {file: n, error: err.message})); }
+    }
+    renderUploads();
+    return;
+  }
   const a = e.target.closest("[data-song]");
   if (a) { e.preventDefault(); showTab("songs"); select(a.dataset.song); }
 };
@@ -977,16 +1018,39 @@ $("#ft-save").onclick = async () => {
       select(res.id);
       return;
     }
-    const res = await api("/api/songs/freetext", {method: "POST", body: ftData()});
-    FT_FIELDS.forEach(k => $("#ft-" + k).value = "");
-    refreshFreetext();
-    await loadSongs();
-    $("#ft-info").innerHTML = `<span style="color:var(--ok)">✓</span> Gespeichert: <a href="#" data-song="${esc(res.id)}">${esc(res.title)}</a>`;
+    await saveFreetext("ask");
   } catch (err) {
     $("#ft-info").innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
   } finally { btn.disabled = false; }
 };
-$("#ft-info").onclick = e => {
+
+// Neues Lied speichern; gibt es den Titel schon, wird nachgefragt (ersetzen / als Kopie).
+async function saveFreetext(mode) {
+  let res;
+  try {
+    res = await api("/api/songs/freetext", {method: "POST", body: {...ftData(), mode}});
+  } catch (err) {
+    if (!(err.data && err.data.conflict)) throw err;
+    $("#ft-info").innerHTML = `<span style="color:var(--warn)">${esc(err.message)}</span>
+      <a href="#" data-song="${esc(err.data.existingId)}">ansehen</a>
+      <div class="btn-row" style="margin-top:4px"><button class="btn small" data-ft="overwrite">Trotzdem speichern (ersetzen)</button>
+      <button class="btn small" data-ft="copy">Als Kopie speichern</button></div>`;
+    return;
+  }
+  FT_FIELDS.forEach(k => $("#ft-" + k).value = "");
+  refreshFreetext();
+  await loadSongs();
+  $("#ft-info").innerHTML = `<span style="color:var(--ok)">✓</span> Gespeichert: <a href="#" data-song="${esc(res.id)}">${esc(res.title)}</a>` +
+    (res.warnings || []).filter(w => /ersetzt|Kopie/.test(w)).map(w => `<div class="muted" style="font-size:12px">${esc(w)}</div>`).join("");
+}
+$("#ft-info").onclick = async e => {
+  const b = e.target.closest("[data-ft]");
+  if (b) {
+    b.disabled = true;
+    try { await saveFreetext(b.dataset.ft); }
+    catch (err) { $("#ft-info").innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`; }
+    return;
+  }
   const a = e.target.closest("[data-song]");
   if (a) { e.preventDefault(); showTab("songs"); select(a.dataset.song); }
 };

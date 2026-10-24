@@ -56,7 +56,8 @@ Anmelden nur mit einem gespeicherten Login-Token.
 ## Lieder ohne ChurchTools hinzufügen
 
 Unter **Lieder → Hochladen** Dateien aus CCLI SongSelect (`.usr` oder `.txt`) oder SongBeamer-Dateien
-(`.sng`) hineinziehen. Gibt es ein Lied mit gleichem Titel schon, wird es nicht überschrieben.
+(`.sng`) hineinziehen. Gibt es ein Lied mit gleichem Titel schon, fragt SongBridge nach: ersetzen
+(das alte Lied wird in `backup/ersetzt/` gesichert), als Kopie speichern oder überspringen.
 
 Ohne Datei geht es über **Lieder → Freitext**: Titel und Liedtext eintragen. Wichtig für die richtige
 Aufteilung: Leerzeile zwischen den Abschnitten, der Name des Abschnitts (`Strophe 1`, `Refrain`,
