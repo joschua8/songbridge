@@ -18,7 +18,3 @@ songbridge/version.py
 .vscode/
 .venv/
 .DS_Store
-
-# Jira script: credentials and downloaded tickets
-tools/jira/.jira.env
-tickets/
