@@ -33,7 +33,18 @@ import requests
 
 from songbridge.songs.sng import is_edited_file, is_manual_file
 
-DEFAULT_URL = "https://kirche-am-fahlt.church.tools"
+DEFAULT_URL = ""  # keine Vorgabe – jede Gemeinde trägt ihre eigene Adresse ein
+URL_EXAMPLE = "https://deine-gemeinde.church.tools"
+
+
+def normalize_url(url: str) -> str:
+    """Adresse wie eingegeben -> https://…, ohne „/“ am Ende. Leer -> ChurchToolsError."""
+    url = (url or "").strip().rstrip("/")
+    if not url:
+        raise ChurchToolsError(f"Bitte die ChurchTools-Adresse angeben (z. B. {URL_EXAMPLE}).")
+    if "://" not in url:
+        url = "https://" + url
+    return url
 PAGE_SIZE = 100
 # Datei -> exakter ChurchTools-Name + Arrangement (Dateinamen sind bereinigt und tragen ggf. „ - Arrangement“).
 INDEX_NAME = "churchtools_index.json"
@@ -53,7 +64,7 @@ def _api_message(resp: requests.Response) -> str:
 
 class ChurchToolsClient:
     def __init__(self, base_url: str):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = normalize_url(base_url)
         self.session = requests.Session()
         self.session.headers["Accept"] = "application/json"
 
@@ -467,7 +478,8 @@ def write_report(out_dir: Path, result: Result) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Alle .sng-Lieder aus ChurchTools herunterladen.")
-    parser.add_argument("--url", default=os.environ.get("CT_URL", DEFAULT_URL), help="ChurchTools-Adresse")
+    parser.add_argument("--url", default=os.environ.get("CT_URL", DEFAULT_URL),
+                        help=f"ChurchTools-Adresse, z. B. {URL_EXAMPLE} (oder Umgebungsvariable CT_URL)")
     parser.add_argument("--user", default=os.environ.get("CT_USER"), help="Benutzername / E-Mail")
     parser.add_argument("--password", default=os.environ.get("CT_PASSWORD"), help="Passwort")
     parser.add_argument("--token", default=os.environ.get("CT_TOKEN"), help="Login-Token (statt Passwort)")
@@ -476,8 +488,8 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="Alle Lieder neu laden statt nur neue/geänderte")
     args = parser.parse_args()
 
-    client = ChurchToolsClient(args.url)
     try:
+        client = ChurchToolsClient(args.url)
         if args.token:
             name = client.login_with_token(args.token)
         else:

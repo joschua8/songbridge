@@ -86,8 +86,12 @@ split into slides:
 
 Presentations (.pptx/.ppt) attached to an event in ChurchTools are converted into images for the playlist.
 This requires **LibreOffice** (free, libreoffice.org) or – on Windows only – an installed **Microsoft PowerPoint**.
-Images, videos and audio work without it. Other files (e.g. .docx or .pdf) are not downloaded at all; their names
-are shown in an orange header at the very top so nothing gets overlooked.
+Images, videos and audio work without it. They are placed at the very top of the playlist. Other files (e.g. .docx or .pdf) are not downloaded at
+all; their names are shown in an orange header at the end of the playlist so nothing gets overlooked.
+
+By default only the red headings of the service plan become playlist headers. Normal agenda items (pink) can be
+added with "Auch normale Ablaufpunkte (rosa) übernehmen" (also include normal agenda items) on the right, or
+individually by ticking them in the service plan.
 
 ## Songs in the playlist (Windows)
 
