@@ -456,7 +456,8 @@ Refrain</pre>
           <button class="btn primary" id="pl-start" style="width:100%" disabled>.proPlaylist herunterladen</button>
           <div id="pl-msg" style="margin-top:8px"></div>
 
-          <fieldset style="margin-top:12px"><legend>Automatisch einfügen</legend>
+          <label class="check" style="margin-top:12px;font-size:13px" title="Standard: nur die roten Überschriften. Einzelne Punkte lassen sich im Ablauf per Häkchen trotzdem übernehmen."><input type="checkbox" data-pl="include_items"> Auch normale Ablaufpunkte (rosa) übernehmen</label>
+          <fieldset style="margin-top:8px"><legend>Automatisch einfügen</legend>
             <label class="check" style="margin-bottom:6px;font-size:13px"><input type="checkbox" data-pl="add_lords_prayer"> Vaterunser unter „Vaterunser“</label>
             <label class="check" style="margin-bottom:6px;font-size:13px"><input type="checkbox" data-pl="add_silence"> Stille-Bild unter „Stille“</label>
           </fieldset>
@@ -1598,7 +1599,7 @@ function defaultInclude(row) {
   if (row.auto === "stille") return !!plSettings.add_silence && !row.error;
   if (row.type === "media") return !row.error;
   if (row.before && !plSettings.include_before) return false;
-  if (row.type === "normal") return plSettings.include_normal;
+  if (row.type === "normal") return !!plSettings.include_items;
   return true;
 }
 
@@ -1649,7 +1650,7 @@ function renderPlan() {
   $("#plan-list").innerHTML = rows.map((r, i) => {
     const sub = [r.before ? "vor Beginn" : "", fmtDur(r.duration), r.responsible].filter(Boolean).map(esc).join(" · ");
     let body;
-    const auto = r.auto && r.auto !== "files" ? ' <span class="badge info" title="Automatisch eingefügt">auto</span>' : "";
+    const auto = r.auto ? ' <span class="badge info" title="Automatisch eingefügt">auto</span>' : "";
     if (r.type === "media") {
       const md = r.media || {};
       const what = md.source === "silence" ? `ein zufälliges von ${md.count || 0} ${md.count === 1 ? "Bild" : "Bildern"} aus dem Stille-Ordner`
@@ -1767,7 +1768,7 @@ async function savePlSettings(rematch) {
 document.querySelectorAll("[data-pl]").forEach(el => el.onchange = () => {
   const key = el.dataset.pl;
   plSettings[key] = el.type === "checkbox" ? el.checked : el.value;
-  if (plan && (key === "include_normal" || key === "include_before"))
+  if (plan && (key === "include_items" || key === "include_before"))
     plan.rows.forEach(r => { if (!r.touched) r.include = defaultInclude(r); });
   const auto = {add_lords_prayer: "vaterunser", add_silence: "stille"}[key];
   if (plan && auto) plan.rows.forEach(r => { if (r.auto === auto) { r.include = defaultInclude(r); r.touched = false; } });
@@ -2185,7 +2186,7 @@ function renderSettingsCt() {
     };
   } else {
     box.innerHTML = `${ctState.autoError ? `<div class="notice warn">${esc(ctState.autoError)}</div>` : ""}
-      <div class="field"><label for="ct-url">ChurchTools-Adresse</label><input type="url" id="ct-url"></div>
+      <div class="field"><label for="ct-url">ChurchTools-Adresse</label><input type="url" id="ct-url" placeholder="https://deine-gemeinde.church.tools"></div>
       <div class="grid2">
         <div class="field"><label for="ct-user">Benutzername / E-Mail</label><input type="text" id="ct-user" autocomplete="username"></div>
         <div class="field"><label for="ct-pass">Passwort</label><input type="password" id="ct-pass" autocomplete="current-password"></div>

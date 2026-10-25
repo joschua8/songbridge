@@ -509,11 +509,11 @@ class CTSession:
         cfg = load_app_settings()
         kind, secret = self._saved_login(cfg)
         key = self._attempt_key(cfg)
-        if not kind or self._auto_tried == key:
+        if not kind or not cfg["ct_url"] or self._auto_tried == key:
             return None
         self._auto_tried = key
         try:
-            client = dl.ChurchToolsClient(cfg["ct_url"] or dl.DEFAULT_URL)
+            client = dl.ChurchToolsClient(cfg["ct_url"])
             if kind == "token":
                 name = client.login_with_token(secret)
             else:
@@ -540,13 +540,13 @@ ct = CTSession()
 
 def _login(data: dict) -> tuple[dl.ChurchToolsClient, str]:
     """Anmeldung aus Formulardaten (url, user, password, totp | token)."""
-    url = (data.get("url") or dl.DEFAULT_URL).strip()
+    url = (data.get("url") or "").strip()
     token = (data.get("token") or "").strip()
     user = (data.get("user") or "").strip()
     password = data.get("password") or ""
     if not token and not (user and password):
         raise dl.ChurchToolsError("Bitte Benutzername und Passwort oder einen Login-Token angeben.")
-    client = dl.ChurchToolsClient(url)
+    client = dl.ChurchToolsClient(url)  # leere Adresse -> ChurchToolsError mit Hinweis
     if token:
         name = client.login_with_token(token)
     else:

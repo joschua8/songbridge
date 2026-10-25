@@ -78,7 +78,10 @@ class PlaylistSettings:
     library_order: list[str] = field(default_factory=list)  # bevorzugte Bibliotheken zuerst
     header_color: str = DEFAULT_HEADER_COLOR
     item_color: str = DEFAULT_ITEM_COLOR
-    include_normal: bool = True          # normale Ablaufpunkte als Kopfzeile
+    # Normale (rosa) Ablaufpunkte als Kopfzeile übernehmen. Standard: nur die roten Überschriften – sonst wird
+    # die Playlist unübersichtlich. (Neuer Name statt „include_normal“, damit gespeicherte Einstellungen
+    # älterer Versionen nicht weiter alle Punkte übernehmen.)
+    include_items: bool = False
     include_before: bool = True          # Punkte „vor dem Gottesdienst“
     missing_as_header: bool = True       # nicht gefundenes Lied: Kopfzeile mit Hinweis statt weglassen
     fuzzy: bool = True                   # ähnliche Namen automatisch zuordnen
@@ -470,24 +473,12 @@ def _auto_row(row_id: str, kind: str, auto: str, title: str, before: bool = Fals
             "start": "", "before": before, "responsible": "", **extra}
 
 
-def _file_target(rows: list[dict], name: str) -> int | None:
-    """Ablaufpunkt, zu dem eine Datei gehört („Predigt Gottes Geschenk.pptx“ -> „Predigt“)."""
-    fk = re.sub(r"\d+", "", _key(Path(name).stem))
-    if len(fk) < 4:
-        return None
-    for i, row in enumerate(rows):
-        if row["type"] == "song" or row.get("auto"):
-            continue
-        rk = re.sub(r"\d+", "", _key(row["title"]))
-        if len(rk) >= 4 and (rk in fk or fk in rk):
-            return i
-    return None
-
-
 def add_auto_rows(rows: list[dict], matcher: Matcher, root: Path | None, settings: PlaylistSettings,
                   event_files: list[dict]) -> list[dict]:
     """Ergänzt den Ablauf um Vaterunser, Stille-Bilder und die Dateien am Termin.
 
+    Dateien am Termin (PowerPoint, Bilder, Videos …) stehen ganz oben in der Playlist, ohne eigene Überschrift;
+    nicht übernommene Dateien (.docx, .pdf …) als Hinweis-Kopfzeile ganz am Ende.
     Die Zeilen werden immer erzeugt; ob sie in die Playlist kommen, entscheidet die Oberfläche
     (Häkchen, Standard aus add_lords_prayer / add_silence).
     """
@@ -497,23 +488,18 @@ def add_auto_rows(rows: list[dict], matcher: Matcher, root: Path | None, setting
         else f"Keine Bilder (.jpg/.png) in {settings.silence_dir}.")
     prayer = None
 
-    files_after: dict[int, list[dict]] = {}
-    skipped: list[str] = []  # .docx, .pdf & Co. kommen nicht in die Playlist, nur als Hinweis-Kopfzeile
+    out: list[dict] = []     # Dateien am Termin zuerst
+    skipped: list[str] = []  # .docx, .pdf & Co. kommen nicht in die Playlist, nur als Hinweis-Kopfzeile am Ende
     for f in event_files:
         kind = media_kind(f["name"])
         if not kind:
             skipped.append(f["name"])
             continue
-        file_row = _auto_row(f"file-{f['id']}", "media", "file", f["name"],
-                             media={"source": "ct", "fileId": f["id"], "name": f["name"], "kind": kind})
-        files_after.setdefault(_file_target(rows, f["name"]), []).append(file_row)
+        out.append(_auto_row(f"file-{f['id']}", "media", "file", f["name"],
+                             media={"source": "ct", "fileId": f["id"], "name": f["name"], "kind": kind}))
 
-    out: list[dict] = []
-    if skipped:
-        out.append(_auto_row("auto-skipped", "header", "skipped", "Nicht übernommene Dateien: " + ", ".join(skipped)))
-    for i, row in enumerate(rows):
+    for row in rows:
         out.append(row)
-        out.extend(files_after.get(i, []))
         if row["type"] == "song":
             continue
         key = _key(row["title"])
@@ -529,10 +515,8 @@ def add_auto_rows(rows: list[dict], matcher: Matcher, root: Path | None, setting
             out.append(_auto_row(f"auto-stille-{row['id']}", "media", "stille", "Stille-Bild", row["before"],
                                  media={"source": "silence", "kind": "image", "count": len(images)},
                                  error=silence_error))
-    rest = files_after.get(None, [])
-    if rest:
-        out.append(_auto_row("auto-files", "header", "files", "Dateien aus ChurchTools"))
-        out.extend(rest)
+    if skipped:
+        out.append(_auto_row("auto-skipped", "header", "skipped", "Nicht übernommene Dateien: " + ", ".join(skipped)))
     return out
 
 

@@ -16,9 +16,9 @@ ProPresenter presentations and turns a service plan into a ready-to-use ProPrese
 
 | Area | What it does |
 |---|---|
-| **Service plan → playlist** | Pick an event in ChurchTools → review its service plan (agenda) → download a `.proPlaylist`. Headings and agenda items become coloured headers, songs link to the presentations that already exist in your ProPresenter library. |
+| **Service plan → playlist** | Pick an event in ChurchTools → review its service plan (agenda) → download a `.proPlaylist`. Headings (red) become playlist headers – normal agenda items can be added with a toggle –, songs link to the presentations that already exist in your ProPresenter library. |
 | **Automatic items** | The Lord's Prayer presentation is added under "Vaterunser" (found by its CCLI number), and a random image from your "silence" folder is added under every item containing "Stille". |
-| **Event files** | PowerPoint, Keynote, images, videos and audio attached to the event in ChurchTools are downloaded and inserted under the matching agenda item (e.g. "Sermon …pptx" under "Sermon"). Presentations are converted into slide images. PDFs, Word files etc. are not downloaded but listed as a note above the agenda. |
+| **Event files** | PowerPoint, Keynote, images, videos and audio attached to the event in ChurchTools are downloaded and placed at the very top of the playlist. Presentations are converted into slide images. PDFs, Word files etc. are not downloaded but listed in a note at the end. |
 | **Song matching** | ChurchTools song name ↔ presentation: exact, ignoring punctuation/CCLI numbers, bilingual titles, similar names ("please check"). Every match can be changed in the UI. |
 | **Song import** | Downloads all SongBeamer files (`.sng`) from ChurchTools into a local song database; every later import only fetches new and changed songs. |
 | **Song upload** | Add songs without a `.sng` via drag & drop as a CCLI SongSelect file (`.usr`/`.txt`) or `.sng`. If a song with the same title exists, you can replace it (with backup), keep both or skip it. |
