@@ -61,10 +61,13 @@ def asset_name() -> str:
     """Name der Release-ZIP für dieses Programm (wie im Build-Workflow)."""
     if sys.platform.startswith("win"):
         return "SongBridge-Windows.zip"
-    if sys.platform == "darwin":
-        arm = platform.machine().lower() in ("arm64", "aarch64")
-        return f"SongBridge-macOS-{'AppleSilicon' if arm else 'Intel'}.zip"
-    return ""
+    if sys.platform == "darwin" and _apple_silicon():
+        return "SongBridge-macOS-AppleSilicon.zip"
+    return ""  # Linux, Intel-Macs: keine Release-Pakete (mehr)
+
+
+def _apple_silicon() -> bool:
+    return platform.machine().lower() in ("arm64", "aarch64")
 
 
 def can_update() -> tuple[bool, str]:
@@ -74,6 +77,8 @@ def can_update() -> tuple[bool, str]:
         return False, f"Abgeschaltet ({ENV_DISABLE})."
     if VERSION == "dev":
         return False, "Programm ohne Versionsnummer gebaut."
+    if sys.platform == "darwin" and not _apple_silicon():
+        return False, "Für Macs mit Intel-Prozessor werden keine neuen Versionen mehr gebaut."
     if not asset_name():
         return False, "Für dieses Betriebssystem gibt es keine Updates."
     return True, ""

@@ -112,7 +112,7 @@ def read_text(path: Path) -> str:
 def parse_sng(text: str) -> Song:
     song = Song()
     # SongBeamer: „---“ trennt Abschnitte, „--“ Folien. Ein Block ohne Abschnittsnamen hängt am vorigen Abschnitt.
-    blocks = re.split(r"^-{2,}[ \t]*$", text.replace("\r\n", "\n").replace("\r", "\n"), flags=re.MULTILINE)
+    blocks = re.split(r"^-{2,}[ \t]*$", normalize_newlines(text), flags=re.MULTILINE)
     for line in blocks[0].splitlines():
         if line.startswith("#") and "=" in line:
             key, value = line[1:].split("=", 1)
@@ -132,7 +132,7 @@ def parse_sng(text: str) -> Song:
 
     parsed = []  # (Abschnittsname oder None, Zeilen)
     for block in blocks[1:]:
-        lines = [ln.rstrip() for ln in block.strip("\n").split("\n")]
+        lines = _undouble([ln.rstrip() for ln in block.strip("\n").split("\n")])
         while lines and not lines[-1]:
             lines.pop()
         if not lines:
@@ -146,6 +146,26 @@ def parse_sng(text: str) -> Song:
     else:
         _add_unlabeled(song, parsed)
     return song
+
+
+def normalize_newlines(text: str) -> str:
+    """Zeilenenden vereinheitlichen. Manche SongBeamer-/ChurchTools-Dateien enden mit „\\r\\r\\n“ –
+    daraus darf keine zusätzliche Leerzeile (= Folienumbruch) werden."""
+    return text.replace("\r\r\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _undouble(lines: list[str]) -> list[str]:
+    """Block „doppelzeilig“ gespeichert (nach JEDER Textzeile genau eine Leerzeile)? -> Leerzeilen entfernen.
+
+    Sonst würde beim Folienumbruch nach Absatz jede Zeile eine eigene Folie.
+    """
+    text = [i for i, ln in enumerate(lines) if ln.strip()]
+    if len(text) < 3:
+        return lines
+    last = text[-1]
+    double = all(i % 2 == text[0] % 2 for i in text) and all(
+        not lines[i].strip() for i in range(text[0] + 1, last, 2))
+    return [ln for ln in lines if ln.strip()] if double else lines
 
 
 def is_sng_label(line: str) -> bool:
@@ -284,7 +304,7 @@ def parse_freetext(text: str) -> tuple[list[Section], list[str], list[str]]:
         sections.append(Section(label, lines))
         order.append(label)
 
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = normalize_newlines(text)
     blocks = [b for b in re.split(r"\n\s*\n", normalized) if b.strip()]
 
     for block in blocks:

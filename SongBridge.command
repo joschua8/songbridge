@@ -1,5 +1,5 @@
 #!/bin/bash
-# Doppelklick im Finder startet SongBridge und öffnet den Browser.
+# Double-click in Finder starts SongBridge from source and opens the browser.
 cd "$(dirname "$0")"
 [ -d .venv ] || python3 -m venv .venv
 .venv/bin/pip install -q -r requirements.txt

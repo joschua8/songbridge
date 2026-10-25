@@ -85,7 +85,7 @@ _LABEL_ALIASES = {
     "Teil": "Misc", "Part": "Misc",
 }
 
-# Tastenkürzel („Song-Navigation“) auf der ersten Folie jeder Gruppe – Zuordnung von Joschua (2026-10-08).
+# Hot keys ("song navigation") on the first slide of each group.
 # In der Oberfläche änderbar.
 DEFAULT_HOTKEYS = {
     "Verse 1": "A", "Verse 2": "S", "Verse 3": "D", "Verse 4": "F", "Verse 5": "G", "Verse 6": "H",

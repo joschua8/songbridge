@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# fetch_tickets.sh – Tickets (z. B. TestFLO-Testfälle) per Jira-REST-API abrufen
-# und je Ticket in einem Ordner mit der Ticketnummer speichern.
+# fetch_tickets.sh – fetch tickets (e.g. TestFLO test cases) via the Jira REST API
+# and store each ticket in a folder named after its key.
 #
-# Modi (genau einer):
-#   -k, --key KEY[,KEY...]   Einzelne Tickets anhand der Ticketnummer
-#   -f, --from DATUM         Tickets ab Datum (YYYY-MM-DD), optional mit --to
-#   -l, --last [N]           Die letzten N Tickets (Standard: 10)
+# Modes (exactly one):
+#   -k, --key KEY[,KEY...]   Single tickets by key
+#   -f, --from DATE          Tickets from date (YYYY-MM-DD), optionally with --to
+#   -l, --last [N]           The latest N tickets (default: 10)
 #
-# Konfiguration über Umgebungsvariablen oder die Datei .jira.env neben dem Skript:
-#   JIRA_URL      z. B. https://firma.atlassian.net oder https://jira.firma.de
-#   JIRA_EMAIL    nur Jira Cloud: Login-E-Mail (zusammen mit JIRA_TOKEN = API-Token)
-#   JIRA_TOKEN    Cloud: API-Token  |  Server/Data Center: Personal Access Token
+# Configuration via environment variables or the file .jira.env next to the script:
+#   JIRA_URL      e.g. https://company.atlassian.net or https://jira.company.com
+#   JIRA_EMAIL    Jira Cloud only: login e-mail (together with JIRA_TOKEN = API token)
+#   JIRA_TOKEN    Cloud: API token  |  Server/Data Center: Personal Access Token
 #
 set -euo pipefail
 
@@ -20,98 +20,98 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
   cat <<'EOF'
-Verwendung:
-  fetch_tickets.sh -k PROJ-123[,PROJ-124]          Tickets per Ticketnummer
-  fetch_tickets.sh -f 2026-10-01 [-t 2026-10-14]   Tickets in einem Zeitraum
-  fetch_tickets.sh -l [N]                          Die letzten N Tickets (Standard 10)
+Usage:
+  fetch_tickets.sh -k PROJ-123[,PROJ-124]          Tickets by key
+  fetch_tickets.sh -f 2026-10-01 [-t 2026-10-14]   Tickets in a date range
+  fetch_tickets.sh -l [N]                          The latest N tickets (default 10)
 
-Optionen:
-  -p, --project KEY      Nur Tickets aus diesem Projekt (für -f / -l)
-  -q, --jql "JQL"        Zusätzlicher JQL-Filter, z. B. 'issuetype = "Test Case"'
-  -d, --date-field FELD  Datumsfeld für -f/-t und -l: created (Standard) oder updated
-  -o, --out DIR          Zielordner (Standard: ./tickets)
-  -a, --attachments      Anhänge mit herunterladen
-  -h, --help             Diese Hilfe
+Options:
+  -p, --project KEY      Only tickets from this project (for -f / -l)
+  -q, --jql "JQL"        Additional JQL filter, e.g. 'issuetype = "Test Case"'
+  -d, --date-field FIELD Date field for -f/-t and -l: created (default) or updated
+  -o, --out DIR          Output folder (default: ./tickets)
+  -a, --attachments      Also download attachments
+  -h, --help             This help
 
-Pro Ticket entsteht <out>/<TICKETNUMMER>/ mit
-  issue.json    vollständige API-Antwort (inkl. Kommentare)
-  ticket.md     lesbare Zusammenfassung
-  attachments/  Anhänge (nur mit -a)
+For each ticket <out>/<TICKET-KEY>/ is created with
+  issue.json    full API response (incl. comments)
+  ticket.md     readable summary
+  attachments/  attachments (only with -a)
 
-Konfiguration (Umgebung oder tools/jira/.jira.env):
-  JIRA_URL=https://firma.atlassian.net
-  JIRA_EMAIL=ich@firma.de        # nur Jira Cloud
-  JIRA_TOKEN=...                 # Cloud: API-Token, Server/DC: Personal Access Token
+Configuration (environment or tools/jira/.jira.env):
+  JIRA_URL=https://company.atlassian.net
+  JIRA_EMAIL=me@company.com      # Jira Cloud only
+  JIRA_TOKEN=...                 # Cloud: API token, Server/DC: Personal Access Token
 EOF
 }
 
-die() { echo "Fehler: $*" >&2; exit 1; }
+die() { echo "Error: $*" >&2; exit 1; }
 
-# ---------- Argumente ----------
+# ---------- Arguments ----------
 MODE="" KEYS="" FROM="" TO="" LAST=10 PROJECT="" EXTRA_JQL=""
 DATE_FIELD="created" OUT_DIR="./tickets" ATTACHMENTS=0
 
-set_mode() { [ -z "$MODE" ] || [ "$MODE" = "$1" ] || die "-k, -f und -l nicht kombinieren."; MODE="$1"; }
+set_mode() { [ -z "$MODE" ] || [ "$MODE" = "$1" ] || die "Do not combine -k, -f and -l."; MODE="$1"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -k|--key)         set_mode key;   KEYS="${2:?Ticketnummer fehlt}"; shift ;;
-    -f|--from)        set_mode range; FROM="${2:?Datum fehlt}"; shift ;;
-    -t|--to)          TO="${2:?Datum fehlt}"; shift ;;
+    -k|--key)         set_mode key;   KEYS="${2:?ticket key missing}"; shift ;;
+    -f|--from)        set_mode range; FROM="${2:?date missing}"; shift ;;
+    -t|--to)          TO="${2:?date missing}"; shift ;;
     -l|--last)        set_mode last
                       if [ $# -gt 1 ] && [[ "$2" =~ ^[0-9]+$ ]]; then LAST="$2"; shift; fi ;;
-    -p|--project)     PROJECT="${2:?Projekt fehlt}"; shift ;;
-    -q|--jql)         EXTRA_JQL="${2:?JQL fehlt}"; shift ;;
-    -d|--date-field)  DATE_FIELD="${2:?Feld fehlt}"; shift ;;
-    -o|--out)         OUT_DIR="${2:?Ordner fehlt}"; shift ;;
+    -p|--project)     PROJECT="${2:?project missing}"; shift ;;
+    -q|--jql)         EXTRA_JQL="${2:?JQL missing}"; shift ;;
+    -d|--date-field)  DATE_FIELD="${2:?field missing}"; shift ;;
+    -o|--out)         OUT_DIR="${2:?folder missing}"; shift ;;
     -a|--attachments) ATTACHMENTS=1 ;;
     -h|--help)        usage; exit 0 ;;
-    *)                usage >&2; die "Unbekannte Option: $1" ;;
+    *)                usage >&2; die "Unknown option: $1" ;;
   esac
   shift
 done
 
 [ -n "$MODE" ] || { usage >&2; exit 1; }
-[ -n "$TO" ] && [ "$MODE" != range ] && die "--to nur zusammen mit --from."
-case "$DATE_FIELD" in created|updated) ;; *) die "--date-field muss created oder updated sein." ;; esac
+[ -n "$TO" ] && [ "$MODE" != range ] && die "--to only together with --from."
+case "$DATE_FIELD" in created|updated) ;; *) die "--date-field must be created or updated." ;; esac
 for d in "$FROM" "$TO"; do
-  [ -z "$d" ] || [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "Datum '$d' nicht im Format YYYY-MM-DD."
+  [ -z "$d" ] || [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "Date '$d' is not in the format YYYY-MM-DD."
 done
-[ "$LAST" -gt 0 ] || die "--last braucht eine Zahl > 0."
+[ "$LAST" -gt 0 ] || die "--last needs a number > 0."
 
-command -v curl >/dev/null || die "curl wird benötigt."
-command -v jq   >/dev/null || die "jq wird benötigt (z. B. 'brew install jq')."
-: "${JIRA_URL:?JIRA_URL ist nicht gesetzt (siehe --help)}"
-: "${JIRA_TOKEN:?JIRA_TOKEN ist nicht gesetzt (siehe --help)}"
+command -v curl >/dev/null || die "curl is required."
+command -v jq   >/dev/null || die "jq is required (e.g. 'brew install jq')."
+: "${JIRA_URL:?JIRA_URL is not set (see --help)}"
+: "${JIRA_TOKEN:?JIRA_TOKEN is not set (see --help)}"
 JIRA_URL="${JIRA_URL%/}"
 
 # ---------- HTTP ----------
-# Cloud: Basic-Auth mit E-Mail + API-Token; Server/DC: Bearer mit Personal Access Token.
+# Cloud: basic auth with e-mail + API token; Server/DC: bearer with Personal Access Token.
 if [ -n "${JIRA_EMAIL:-}" ]; then
   AUTH=(-u "$JIRA_EMAIL:$JIRA_TOKEN")
-  SEARCH_PATH="/rest/api/2/search/jql"   # Cloud: neue Such-API mit nextPageToken
+  SEARCH_PATH="/rest/api/2/search/jql"   # Cloud: new search API with nextPageToken
 else
   AUTH=(-H "Authorization: Bearer $JIRA_TOKEN")
-  SEARCH_PATH="/rest/api/2/search"       # Server/DC: klassische Suche mit startAt
+  SEARCH_PATH="/rest/api/2/search"       # Server/DC: classic search with startAt
 fi
 
-# jira_get PFAD [curl-Argumente...] – gibt den Body aus, bricht bei HTTP-Fehlern ab.
+# jira_get PATH [curl args...] – prints the body, aborts on HTTP errors.
 jira_get() {
   local path="$1"; shift
   local body status
   body="$(curl -sS -w $'\n%{http_code}' "${AUTH[@]}" -H "Accept: application/json" "$@" "$JIRA_URL$path")" \
-    || die "Verbindung zu $JIRA_URL fehlgeschlagen."
+    || die "Connection to $JIRA_URL failed."
   status="${body##*$'\n'}"
   body="${body%$'\n'*}"
   if [ "$status" -ge 400 ]; then
     local msg
     msg="$(printf '%s' "$body" | jq -r '[.errorMessages[]?, (.errors // {} | to_entries[] | "\(.key): \(.value)")] | join("; ")' 2>/dev/null || true)"
-    die "HTTP $status für $path${msg:+ – $msg}"
+    die "HTTP $status for $path${msg:+ – $msg}"
   fi
   printf '%s' "$body"
 }
 
-# ---------- Speichern ----------
+# ---------- Saving ----------
 save_issue() {
   local key="$1" dir issue
   dir="$OUT_DIR/$key"
@@ -123,19 +123,19 @@ save_issue() {
     .fields as $f |
     "# \(.key): \($f.summary // "")\n",
     "- Link: \($url)/browse/\(.key)",
-    "- Typ: \($f.issuetype.name // "-")",
+    "- Type: \($f.issuetype.name // "-")",
     "- Status: \($f.status.name // "-")",
-    "- Priorität: \($f.priority.name // "-")",
-    "- Bearbeiter: \($f.assignee.displayName // "-")",
-    "- Autor: \($f.reporter.displayName // "-")",
-    "- Erstellt: \($f.created // "-")",
-    "- Aktualisiert: \($f.updated // "-")",
+    "- Priority: \($f.priority.name // "-")",
+    "- Assignee: \($f.assignee.displayName // "-")",
+    "- Reporter: \($f.reporter.displayName // "-")",
+    "- Created: \($f.created // "-")",
+    "- Updated: \($f.updated // "-")",
     "- Labels: \(($f.labels // []) | join(", "))",
-    "\n## Beschreibung\n",
-    ($f.description // "_(keine)_"),
-    "\n## Kommentare\n",
+    "\n## Description\n",
+    ($f.description // "_(none)_"),
+    "\n## Comments\n",
     ( ($f.comment.comments // []) as $c
-      | if ($c | length) == 0 then "_(keine)_"
+      | if ($c | length) == 0 then "_(none)_"
         else $c[] | "### \(.author.displayName // "?") – \(.created)\n\n\(.body)\n" end )
   ' > "$dir/ticket.md"
 
@@ -146,17 +146,17 @@ save_issue() {
       mkdir -p "$dir/attachments"
       name="${name//\//_}"
       curl -sS -fL "${AUTH[@]}" -o "$dir/attachments/$name" "$url" \
-        || echo "  Warnung: Anhang '$name' konnte nicht geladen werden." >&2
+        || echo "  Warning: attachment '$name' could not be downloaded." >&2
       n=$((n + 1))
     done < <(printf '%s' "$issue" | jq -r '.fields.attachment[]? | [.filename, .content] | @tsv')
-    echo "  $key gespeichert ($n Anhänge)"
+    echo "  $key saved ($n attachments)"
   else
-    echo "  $key gespeichert"
+    echo "  $key saved"
   fi
 }
 
-# ---------- Suche ----------
-# search_keys JQL MAX – gibt Ticketnummern zeilenweise aus (MAX=0: alle).
+# ---------- Search ----------
+# search_keys JQL MAX – prints ticket keys line by line (MAX=0: all).
 search_keys() {
   local jql="$1" max="$2" fetched=0 page size token="" start=0 resp
   while :; do
@@ -192,17 +192,17 @@ build_jql() {
   [ -n "$EXTRA_JQL" ] && parts+=("($EXTRA_JQL)")
   if [ "$MODE" = range ]; then
     parts+=("$DATE_FIELD >= \"$FROM\"")
-    # --to ist inklusive (bis Tagesende)
+    # --to is inclusive (until end of day)
     [ -n "$TO" ] && parts+=("$DATE_FIELD <= \"$TO 23:59\"")
   fi
   local jql="" p
   for p in "${parts[@]+"${parts[@]}"}"; do jql="${jql:+$jql AND }$p"; done
-  # Jira Cloud verlangt eine eingeschränkte Suche
+  # Jira Cloud requires a bounded search
   [ -n "$jql" ] || jql="$DATE_FIELD >= -3650d"
   printf '%s ORDER BY %s DESC' "$jql" "$DATE_FIELD"
 }
 
-# ---------- Ablauf ----------
+# ---------- Main ----------
 mkdir -p "$OUT_DIR"
 
 if [ "$MODE" = key ]; then
@@ -214,14 +214,14 @@ else
   KEY_LIST="$(search_keys "$JQL" "$max")"
 fi
 
-[ -n "$KEY_LIST" ] || { echo "Keine Tickets gefunden."; exit 0; }
+[ -n "$KEY_LIST" ] || { echo "No tickets found."; exit 0; }
 
 count="$(printf '%s\n' "$KEY_LIST" | wc -l | tr -d ' ')"
-echo "Lade $count Ticket(s) nach $OUT_DIR ..."
+echo "Fetching $count ticket(s) into $OUT_DIR ..."
 failed=0
 while IFS= read -r key; do
   ( save_issue "$key" ) || failed=$((failed + 1))
 done <<< "$KEY_LIST"
 
-echo "Fertig: $((count - failed)) gespeichert, $failed fehlgeschlagen."
+echo "Done: $((count - failed)) saved, $failed failed."
 [ "$failed" -eq 0 ]

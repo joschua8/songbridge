@@ -30,7 +30,7 @@ class SongSelectError(ValueError):
 
 
 def _clean(text: str) -> str:
-    return text.replace("﻿", "").replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("﻿", "").replace("\r\r\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _song(title: str, author: str, ccli: str, copyright_: str, blocks: list[tuple[str, list[str]]]) -> tuple[Song, list[str]]:

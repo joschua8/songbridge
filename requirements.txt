@@ -1,5 +1,5 @@
 requests>=2.31
 flask>=3.0
 protobuf>=7.36
-pymupdf>=1.24  # PowerPoint/PDF -> Folienbilder (PowerPoint zusätzlich: LibreOffice)
-keyring>=25  # Passwort im Schlüsselbund (macOS/Windows) speichern
+pymupdf>=1.24  # PowerPoint/PDF -> slide images (PowerPoint additionally needs LibreOffice)
+keyring>=25  # store the ChurchTools password in the system keychain (macOS/Windows)

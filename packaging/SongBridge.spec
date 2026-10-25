@@ -1,6 +1,6 @@
-# PyInstaller-Konfiguration: eine einzelne Programmdatei „SongBridge“ (bzw. .exe).
+# PyInstaller configuration: a single program file "SongBridge" (or .exe on Windows).
 #   pip install pyinstaller && pyinstaller packaging/SongBridge.spec   ->  dist/SongBridge
-# (aus dem Projektordner aufrufen)
+# (run from the project folder)
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules, copy_metadata
@@ -13,16 +13,19 @@ pb2 = [p.stem for p in PROTO.glob("*_pb2.py")]
 
 a = Analysis(
     [str(Path(SPECPATH) / "main.py")],
-    pathex=[str(ROOT), str(PROTO)],  # die *_pb2-Module importieren sich ohne Paketpräfix
+    pathex=[str(ROOT), str(PROTO)],  # the *_pb2 modules import each other without a package prefix
     datas=[
         (str(PKG / "web"), "songbridge/web"),
         (str(PKG / "resources"), "songbridge/resources"),
         (str(PROTO / "LICENSE-ProPresenter7-Proto"), "songbridge/propresenter/proto"),
-        *copy_metadata("keyring"),  # keyring findet seine Backends (Schlüsselbund) über die Paket-Metadaten
+        *copy_metadata("keyring"),  # keyring finds its backends (system keychain) via the package metadata
     ],
-    # songbridge/version.py schreibt der Build (fehlt beim Start aus dem Quellcode)
+    # songbridge/version.py is written by the build (missing when running from source)
     hiddenimports=pb2 + ["songbridge.version"] + collect_submodules("keyring.backends"),
-    excludes=["tkinter"],
+    # pymupdf >= 2 imports an AI layout module (onnxruntime + model files) that SongBridge does not need
+    # (it only renders PDF pages to images). When bundled, its data files were missing and the playlist
+    # export crashed. Without the module, pymupdf catches the ImportError itself.
+    excludes=["tkinter", "pymupdf.layout", "pymupdf4llm", "onnxruntime", "networkx"],
 )
 pyz = PYZ(a.pure)
 exe = EXE(
@@ -31,6 +34,6 @@ exe = EXE(
     a.binaries,
     a.datas,
     name="SongBridge",
-    console=True,  # Fenster zeigt Adresse/Datenordner; Schließen beendet das Programm
+    console=True,  # the window shows address/data folder; closing it quits the program
     upx=False,
 )
