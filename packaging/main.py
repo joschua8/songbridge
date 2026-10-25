@@ -1,4 +1,4 @@
-"""Einstiegspunkt für PyInstaller (braucht ein Skript statt `python -m songbridge`)."""
+"""Entry point for PyInstaller (it needs a script instead of `python -m songbridge`)."""
 
 from songbridge.app import main
 

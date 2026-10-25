@@ -393,7 +393,7 @@ def plan_items(agenda: dict, matcher: Matcher, fuzzy: bool = True) -> list[dict]
 
 # ------------------------------------------------------------------ Automatische Einträge
 
-# Vaterunser: CCLI 7113062 laut Joschua; die Präsentation „Sample/Vater Unser.pro“ trägt 7116302.
+# Lord's Prayer: two CCLI numbers are in use (7113062 and 7116302 in an existing presentation).
 LORDS_PRAYER_CCLI = {7113062, 7116302}
 LORDS_PRAYER_NAMES = ("Vater Unser", "Vaterunser")
 

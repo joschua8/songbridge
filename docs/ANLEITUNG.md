@@ -1,5 +1,7 @@
 # SongBridge – Programm starten
 
+*English version: [GUIDE.md](GUIDE.md)*
+
 SongBridge ist ein einzelnes Programm, eine Python-Installation braucht es nicht.
 Nach dem Start öffnet sich der Browser mit der Oberfläche (http://127.0.0.1:5005).
 Das Terminal-Fenster dabei offen lassen; wenn man es schließt, wird das Programm beendet.
@@ -14,8 +16,9 @@ Das Terminal-Fenster dabei offen lassen; wenn man es schließt, wird das Program
    `xattr -d com.apple.quarantine /Pfad/zu/SongBridge`
 3. Danach reicht ein Doppelklick.
 
-Es gibt zwei Fassungen: **AppleSilicon** (Macs ab Ende 2020 mit M1/M2/M3/M4) und **Intel** (ältere Macs).
-Unter Apple-Menü → „Über diesen Mac“ steht, welcher Chip verbaut ist.
+Fertige Programmversionen gibt es nur für Macs mit **Apple Silicon** (ab Ende 2020, M1/M2/M3/M4).
+Unter Apple-Menü → „Über diesen Mac“ steht, welcher Chip verbaut ist. Für Macs mit Intel-Prozessor werden
+keine neuen Versionen mehr gebaut.
 
 ## Windows
 
@@ -39,7 +42,7 @@ Gibt es von früher schon einen Ordner **Liedbruecke** oder **Liederverwaltung**
 
 - `songs/` – die Liederdatenbank (.sng-Dateien)
 - `app_settings.json`, `playlist_settings.json`, `export_settings.json` – Einstellungen
-- `backup/` – Sicherungen überschriebener ProPresenter-Dateien
+- `backup/` – Sicherungen überschriebener ProPresenter-Dateien und ersetzter Lieder
 
 Zum Umziehen auf einen anderen Rechner einfach diesen Ordner mitkopieren.
 Ein anderer Ort lässt sich über die Umgebungsvariable `SONGBRIDGE_DATA` einstellen.
@@ -62,7 +65,7 @@ Unter **Lieder → Hochladen** Dateien aus CCLI SongSelect (`.usr` oder `.txt`) 
 Ohne Datei geht es über **Lieder → Freitext**: Titel und Liedtext eintragen. Wichtig für die richtige
 Aufteilung: Leerzeile zwischen den Abschnitten, der Name des Abschnitts (`Strophe 1`, `Refrain`,
 `Bridge` …) allein in der ersten Zeile, Wiederholungen nur als Name (z. B. `Refrain`) statt den Text
-noch einmal zu tippen. Die Anleitung mit Beispiel steht direkt über dem Textfeld, rechts daneben
+noch einmal zu tippen. Eine Zeile nur mit `--` beginnt innerhalb eines Abschnitts eine neue Folie. Die Anleitung mit Beispiel steht direkt über dem Textfeld, rechts daneben
 siehst du sofort, wie das Lied gespeichert wird.
 
 ## Lieder bearbeiten
@@ -72,6 +75,15 @@ Jedes Lied hat in der Bibliothek den Knopf **Bearbeiten** – auch Lieder aus Ch
 „bearbeitet“: Der Lieder-Import überschreibt sie nicht mehr, auch wenn sich das Lied in ChurchTools ändert.
 Mit **Original wiederherstellen** holst du die ursprüngliche ChurchTools-Fassung zurück (sie wird beim
 ersten Bearbeiten unter `backup/originale/` gesichert).
+
+## Folienumbruch beim Export
+
+Unter **ProPresenter → Export & Formatierung → Folie → Folienumbruch** legst du fest, wie der Liedtext auf
+Folien verteilt wird:
+
+- **Zeilenzahl:** Jeder Abschnitt wird gleichmäßig nach „Zeilen pro Folie“ aufgeteilt.
+- **Absatz:** Jeder Absatz der Lieddatei wird genau eine Folie. Passt der Text nicht in die Textbox,
+  verkleinert ProPresenter die Schrift automatisch.
 
 ## PowerPoint-Dateien im Ablaufplan
 

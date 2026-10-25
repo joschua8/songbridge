@@ -1,90 +1,135 @@
 # SongBridge
 
-**Die Brücke zwischen ChurchTools und ProPresenter 7.**
-SongBridge holt die Lieder (SongBeamer-Dateien) aus ChurchTools, wandelt sie in ProPresenter-Präsentationen um
-und macht aus dem Ablaufplan eines Gottesdienstes mit einem Klick eine fertige ProPresenter-Playlist.
+**The bridge between ChurchTools and ProPresenter 7.**
+SongBridge pulls your songs (SongBeamer files) from [ChurchTools](https://church.tools), converts them into
+ProPresenter presentations and turns a service plan into a ready-to-use ProPresenter playlist with a single click.
 
-
-
-> SongBridge ist ein privates Projekt und steht in keiner Verbindung zu ChurchTools (ECGroup) oder
+> SongBridge is a private project and is not affiliated with ChurchTools (ECGroup) or
 > Renewed Vision (ProPresenter).
+>
+> The user interface is currently in **German**, since ChurchTools is mainly used by churches in
+> German-speaking countries.
 
 ---
 
-## Funktionen
+## Features
 
-| Bereich | Was es tut |
+| Area | What it does |
 |---|---|
-| **Ablaufplan → Playlist** | Termin in ChurchTools wählen → Ablaufplan ansehen → `.proPlaylist` herunterladen. Überschriften und Ablaufpunkte werden farbige Kopfzeilen, Lieder verweisen auf die vorhandenen Präsentationen in deiner ProPresenter-Bibliothek. |
-| **Automatische Einträge** | Unter „Vaterunser“ kommt die Vaterunser-Präsentation (per CCLI-Nummer gefunden), unter jedem Punkt mit „Stille“ ein zufälliges Bild aus deinem Stille-Ordner. |
-| **Dateien am Termin** | PowerPoint, Keynote, Bilder, Videos und Audio aus dem Reiter „Dateien“ des Termins werden geladen und unter dem passenden Ablaufpunkt eingefügt (z. B. „Predigt …pptx“ unter „Predigt“). Präsentationen werden dafür in Folienbilder umgewandelt. PDFs, Word-Dateien usw. werden nicht geladen, sondern nur als Hinweis über dem Ablauf genannt. |
-| **Liedzuordnung** | ChurchTools-Liedname ↔ Präsentation: exakt, ohne Satzzeichen/CCLI-Nummer, zweisprachige Titel, ähnliche Namen („bitte prüfen“). Jede Zuordnung lässt sich in der Oberfläche ändern. |
-| **Lieder-Import** | Alle SongBeamer-Dateien (`.sng`) aus ChurchTools in eine lokale Liederdatenbank laden; bei jedem weiteren Import nur neue und geänderte. |
-| **Lieder hochladen** | Lieder ohne `.sng` als CCLI-SongSelect-Datei (`.usr`/`.txt`) oder `.sng` per Drag & Drop hinzufügen. |
-| **Freitext** | Liedtext einfügen; Abschnitte (Strophe, Refrain, Bridge …) werden erkannt, Vorschau und Formathinweise inklusive. |
-| **Bearbeiten** | Jedes Lied (auch aus ChurchTools) als Freitext bearbeiten; der Import überschreibt bearbeitete Lieder nicht, das Original lässt sich wiederherstellen. |
-| **Export nach ProPresenter** | `.sng` → `.pro`, mit einstellbarer Formatierung (Schrift, Größe, Farben, Folienumbruch nach Zeilenzahl oder nach Absatz mit automatischem Verkleinern, Textbox per Maus verschieben), Folienvorschau und Tastenkürzeln je Liedteil (Strophe 1 = A, Refrain = C, Bridge = B …). |
-| **Abgleich** | Vergleicht die Liederdatenbank mit deiner ProPresenter-Lieder-Bibliothek: was fehlt, was hat anderen Text – und aktualisiert auf Wunsch (mit Sicherung). |
-
+| **Service plan → playlist** | Pick an event in ChurchTools → review its service plan (agenda) → download a `.proPlaylist`. Headings and agenda items become coloured headers, songs link to the presentations that already exist in your ProPresenter library. |
+| **Automatic items** | The Lord's Prayer presentation is added under "Vaterunser" (found by its CCLI number), and a random image from your "silence" folder is added under every item containing "Stille". |
+| **Event files** | PowerPoint, Keynote, images, videos and audio attached to the event in ChurchTools are downloaded and inserted under the matching agenda item (e.g. "Sermon …pptx" under "Sermon"). Presentations are converted into slide images. PDFs, Word files etc. are not downloaded but listed as a note above the agenda. |
+| **Song matching** | ChurchTools song name ↔ presentation: exact, ignoring punctuation/CCLI numbers, bilingual titles, similar names ("please check"). Every match can be changed in the UI. |
+| **Song import** | Downloads all SongBeamer files (`.sng`) from ChurchTools into a local song database; every later import only fetches new and changed songs. |
+| **Song upload** | Add songs without a `.sng` via drag & drop as a CCLI SongSelect file (`.usr`/`.txt`) or `.sng`. If a song with the same title exists, you can replace it (with backup), keep both or skip it. |
+| **Free text** | Paste lyrics; sections (verse, chorus, bridge …) are detected automatically, with live preview and formatting hints. `--` on its own line starts a new slide within a section. |
+| **Editing** | Edit any song (including ChurchTools songs) as free text; the import never overwrites edited songs and the original can be restored. |
+| **Export to ProPresenter** | `.sng` → `.pro` with configurable formatting (font, size, colours, slide breaks by line count or by paragraph with automatic font scaling, text box positioned with the mouse), slide preview and hot keys per song part (verse 1 = A, chorus = C, bridge = B …). |
+| **Library sync** | Compares the song database with your ProPresenter song library: what is missing, what has different lyrics – and updates it on request (with backup). |
+| **Self-updating** | The app checks GitHub Releases on start-up and updates itself. |
 
 ## Installation
 
-1. Unter [**Releases**](../../releases/latest) die passende ZIP laden:
+1. Download the matching ZIP from [**Releases**](../../releases/latest):
    - `SongBridge-Windows.zip`
-   - `SongBridge-macOS-AppleSilicon.zip` (Macs mit M1/M2/M3/M4)
-   - `SongBridge-macOS-Intel.zip` (ältere Macs)
-2. Entpacken und die Programmdatei in einen Ordner legen, in den du schreiben darfst (Desktop, Programme …) –
-   sonst kann sie sich nicht selbst aktualisieren.
-3. Starten:
-   - **Windows:** `SongBridge.exe` doppelklicken. Bei „Der Computer wurde durch Windows geschützt“:
-     „Weitere Informationen“ → „Trotzdem ausführen“.
-   - **macOS:** beim ersten Mal **Rechtsklick → Öffnen** (das Programm ist nicht bei Apple signiert).
-4. Der Browser öffnet sich mit der Oberfläche (`http://127.0.0.1:5005`). Das Terminal-Fenster offen lassen –
-   wenn man es schließt, wird das Programm beendet.
+   - `SongBridge-macOS-AppleSilicon.zip` (Macs with M1/M2/M3/M4)
 
-Für PowerPoint-Dateien im Ablaufplan braucht es [LibreOffice](https://www.libreoffice.org) (kostenlos) oder –
-nur unter Windows – ein installiertes Microsoft PowerPoint. Bilder, Videos und Audio gehen ohne.
+   Macs with an Intel processor are no longer supported by the pre-built releases; you can still
+   [run SongBridge from source](#running-from-source).
+2. Unzip it and put the program file into a folder you are allowed to write to (Desktop, Applications …) –
+   otherwise it cannot update itself.
+3. Start it:
+   - **Windows:** double-click `SongBridge.exe`. If you see "Windows protected your PC":
+     "More info" → "Run anyway".
+   - **macOS:** the first time use **right-click → Open** (the app is not signed by Apple).
+4. Your browser opens the user interface (`http://127.0.0.1:5005`). Keep the terminal window open –
+   closing it quits the app.
 
-## Bedienung
+For PowerPoint files attached to a service plan you need [LibreOffice](https://www.libreoffice.org) (free) or –
+on Windows only – an installed Microsoft PowerPoint. Images, videos and audio work without it.
 
+A step-by-step guide for end users is included in every release: [`docs/GUIDE.md`](docs/GUIDE.md)
+(German: [`docs/ANLEITUNG.md`](docs/ANLEITUNG.md)).
 
-### Playlist für den Gottesdienst („ChurchTools → Ablaufpläne“)
+## Usage
 
-1. Termin auswählen. Der Ablaufplan erscheint mit der Zuordnung jedes Liedes:
-   grün = gefunden, gelb = ähnlicher Name (bitte prüfen), rot = fehlt.
-2. Bei Bedarf Zuordnungen über „ändern“ korrigieren und Punkte per Häkchen ab- oder anwählen.
-3. Rechts **„.proPlaylist herunterladen“** und die Datei in ProPresenter öffnen (Doppelklick oder in die
-   Playlist-Liste ziehen).
+### Playlist for a service ("ChurchTools → Ablaufpläne")
 
-> **Windows:** ProPresenter zeigt die Lieder einer Playlist dort nur an, wenn sie mitgeliefert werden.
-> Deshalb ist unter Windows „Lieder in die Playlist-Datei packen“ eingeschaltet; ProPresenter fragt beim Öffnen,
-> ob vorhandene Präsentationen ersetzt werden sollen. Unter macOS bleibt es aus (sonst entstehen Duplikate).
+1. Select an event. The service plan appears together with the match for each song:
+   green = found, yellow = similar name (please check), red = missing.
+2. If necessary, fix matches via "ändern" (change) and tick/untick items.
+3. Click **".proPlaylist herunterladen"** on the right and open the file in ProPresenter (double-click it or drag it
+   into the playlist list).
 
-### 3. Lieder pflegen
+> **Windows:** ProPresenter on Windows only shows the songs of a playlist if they are bundled with it.
+> That is why "Lieder in die Playlist-Datei packen" (bundle songs into the playlist file) is enabled on Windows;
+> ProPresenter asks whether existing presentations should be replaced when you open it. On macOS it stays off
+> (otherwise duplicates would be created).
 
-- **ChurchTools → Lieder-Import:** lädt alle `.sng` 
-- **Lieder → Hochladen:** SongSelect- oder `.sng`-Dateien hineinziehen.
-- **Lieder → Freitext:** Liedtext eintippen/einfügen – Format steht über dem Textfeld.
-- **ProPresenter → Export & Formatierung:** Lieder auswählen, Formatierung einstellen, als ZIP mit `.pro`-Dateien laden
-  und in ProPresenter importieren.
-- **ProPresenter → Abgleich:** zeigt Unterschiede zwischen Datenbank und ProPresenter-Bibliothek.
+### Maintaining songs
 
-### Daten
+- **ChurchTools → Lieder-Import:** downloads all `.sng` files (only new/changed ones after the first run).
+- **Lieder → Hochladen:** drop SongSelect or `.sng` files.
+- **Lieder → Freitext:** type or paste lyrics – the format is explained above the text box.
+- **ProPresenter → Export & Formatierung:** select songs, adjust formatting, download a ZIP of `.pro` files
+  and import it into ProPresenter.
+- **ProPresenter → Abgleich:** shows the differences between the database and your ProPresenter library.
 
-Lieder und Einstellungen liegen im Ordner `SongBridge` in deinem Benutzerordner (bzw. `Liedbruecke`/`Liederverwaltung`
-aus früheren Versionen). Zum Umziehen einfach den Ordner mitkopieren. Anderer Ort: Umgebungsvariable `SONGBRIDGE_DATA`.
+### Data
 
+Songs and settings are stored in the `SongBridge` folder in your home directory (or `Liedbruecke`/`Liederverwaltung`
+from earlier versions). To move to another computer, simply copy that folder. A different location can be set with
+the environment variable `SONGBRIDGE_DATA`.
 
+Nothing is sent anywhere except to your own ChurchTools instance and – for update checks – to the GitHub API.
+A saved ChurchTools password is kept in the operating system's keychain (macOS Keychain / Windows Credential
+Manager). Only if no keychain is available (e.g. Linux without a Secret Service) it falls back to
+`credentials.json` in the data folder, readable only by your user.
 
+## Running from source
 
+Tested with Python 3.12 (the version used for the releases).
 
+```sh
+git clone https://github.com/joschua8/songbridge.git
+cd songbridge
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m songbridge          # opens http://127.0.0.1:5005
+```
+
+On macOS you can also double-click `SongBridge.command`.
+
+### Building the stand-alone app
+
+```sh
+pip install pyinstaller
+pyinstaller --noconfirm --clean packaging/SongBridge.spec   # -> dist/SongBridge(.exe)
+```
+
+Every push to `master` is built by GitHub Actions for Windows and macOS (Apple Silicon) and published as a
+GitHub Release; the app updates itself from there.
+
+### Project layout
+
+```
+songbridge/
+  app.py                 Flask web server + API for the browser UI
+  churchtools.py         ChurchTools REST client, song import with change detection
+  songs/                 SongBeamer (.sng) and SongSelect parsing, free-text parser
+  propresenter/          .pro export, .proPlaylist builder, library sync, protobuf definitions
+  web/index.html         the whole user interface (single page)
+  updater.py             self-update from GitHub Releases
+packaging/               PyInstaller spec and entry point
+docs/                    end-user guide (English + German)
+```
 
 ## Credits
 
-- **[greyshirtguy/ProPresenter7-Proto](https://github.com/greyshirtguy/ProPresenter7-Proto)** – die
-  reverse-engineerten Protobuf-Definitionen des ProPresenter-7-Dateiformats. Ohne sie wäre die Umwandlung
-  von SongBeamer-Dateien in ProPresenter-Präsentationen (und das Schreiben von Playlists) nicht möglich.
-  Die daraus erzeugten `*_pb2.py` in `songbridge/propresenter/proto/` stehen unter der MIT-Lizenz von greyshirtguy
-  (siehe [`LICENSE-ProPresenter7-Proto`](songbridge/propresenter/proto/LICENSE-ProPresenter7-Proto)).
-  Vielen Dank!
-- [ChurchTools](https://church.tools) für die offene REST-API.
+- **[greyshirtguy/ProPresenter7-Proto](https://github.com/greyshirtguy/ProPresenter7-Proto)** – the
+  reverse-engineered protobuf definitions of the ProPresenter 7 file format. Without them, converting SongBeamer
+  files into ProPresenter presentations (and writing playlists) would not be possible.
+  The generated `*_pb2.py` files in `songbridge/propresenter/proto/` are under greyshirtguy's MIT licence
+  (see [`LICENSE-ProPresenter7-Proto`](songbridge/propresenter/proto/LICENSE-ProPresenter7-Proto)).
+  Thank you!
+- [ChurchTools](https://church.tools) for its open REST API.

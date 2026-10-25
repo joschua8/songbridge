@@ -1,15 +1,20 @@
-app_settings.json
-backup/
+# Local data – when SongBridge runs from source, the repository folder is its data folder.
+# None of this may ever be committed (settings, saved ChurchTools login, songs, backups).
+/app_settings.json
+/playlist_settings.json
+/export_settings.json
+/credentials.json
+/songs/
+/backup/
+
+# Build output
 __pycache__/
 build/
 dist/
 songbridge/version.py
-songs/
-playlist_settings.json
+
+# Editors / OS
 .idea/
+.vscode/
 .venv/
 .DS_Store
-
-# Jira-Skript: Zugangsdaten und abgerufene Tickets
-tools/jira/.jira.env
-tickets/
