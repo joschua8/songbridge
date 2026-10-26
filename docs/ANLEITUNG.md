@@ -81,7 +81,10 @@ ersten Bearbeiten unter `backup/originale/` gesichert).
 Unter **ProPresenter → Export & Formatierung → Folie → Folienumbruch** legst du fest, wie der Liedtext auf
 Folien verteilt wird:
 
-- **Zeilenzahl:** Jeder Abschnitt wird gleichmäßig nach „Zeilen pro Folie“ aufgeteilt.
+- **Zeilenzahl:** Jeder Abschnitt wird auf Folien mit höchstens „Zeilen pro Folie“ Zeilen verteilt.
+  Mit **„An Satzenden umbrechen“** (standardmäßig an) beginnt eine neue Folie bevorzugt nach einem Satzende
+  (`.` `!` `?`), sonst nach `;`/`:`, sonst nach einem Komma – mitten im Satz nur, wenn es nicht anders geht.
+  Lieder ohne Satzzeichen werden wie bisher gleichmäßig aufgeteilt.
 - **Absatz:** Jeder Absatz der Lieddatei wird genau eine Folie. Passt der Text nicht in die Textbox,
   verkleinert ProPresenter die Schrift automatisch.
 

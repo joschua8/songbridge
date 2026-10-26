@@ -132,6 +132,7 @@ class TextStyle:
 class ExportStyle:
     """Alle einstellbaren Formatierungen. Standard = resources/BeispielZielFormatierung.json."""
     slide_break: str = "lines"    # lines: nach Zeilenzahl / paragraph: je Absatz der Vorlage eine Folie
+    smart_breaks: bool = True     # bei „lines“: möglichst an Satzenden umbrechen statt stur gleichmäßig
     lines_per_slide: int = 4      # einsprachig
     pairs_per_slide: int = 2      # zweisprachig (Original + Übersetzung)
     main: TextStyle = field(default_factory=TextStyle)
@@ -386,6 +387,94 @@ def _chunks(items: list, size: int) -> list[list]:
     return out
 
 
+# Kosten eines Folienumbruchs nach einer Zeile – je nachdem, womit sie endet (kleiner = besser).
+_END_CLOSERS = " \t\"'“”„»«›‹)]’"
+BREAK_COST_SENTENCE = 0     # . ! ? … oder Absatzgrenze der Vorlage
+BREAK_COST_CLAUSE = 1       # ; :
+BREAK_COST_COMMA = 3        # , – -
+BREAK_COST_NONE = 10        # mitten im Satz
+EXTRA_SLIDE_COST = 6        # eine Folie mehr als nötig, um einen schlechten Umbruch zu vermeiden
+SINGLE_LINE_COST = 3        # Folie mit nur einer Zeile (wenn der Abschnitt mehr hat)
+
+
+def break_cost(text: str, paragraph_end: bool = False) -> int:
+    """Wie gut passt ein Folienumbruch nach dieser Zeile?"""
+    if paragraph_end:
+        return BREAK_COST_SENTENCE
+    end = text.rstrip(_END_CLOSERS)[-1:]
+    if end in (".", "!", "?", "…"):
+        return BREAK_COST_SENTENCE
+    if end in (";", ":"):
+        return BREAK_COST_CLAUSE
+    if end in (",", "–", "—", "-"):
+        return BREAK_COST_COMMA
+    return BREAK_COST_NONE
+
+
+def _smart_chunks(items: list, size: int, costs: list[int]) -> list[list]:
+    """Wie _chunks, aber Umbrüche bevorzugt an Satzenden.
+
+    costs[i] = Kosten eines Umbruchs nach items[i]. Erlaubt sind höchstens `size` Einträge pro Folie und die
+    kleinstmögliche Folienzahl (oder eine mehr, wenn das einen Umbruch mitten im Satz vermeidet).
+    Bewertet werden Umbruchstellen und Gleichmäßigkeit; bei gleich guten Varianten gewinnt die gleichmäßigste.
+    """
+    n = len(items)
+    if n <= size:
+        return [list(items)] if items else [[]]
+    k_min = math.ceil(n / size)
+    best: tuple[float, list[int]] | None = None
+    for k in (k_min, k_min + 1):
+        if k > n:
+            continue
+        target = n / k
+        # dp[j][i]: beste Kosten, die ersten i Einträge auf j Folien zu verteilen (+ Umbruchstellen)
+        inf = float("inf")
+        dp = [[(inf, [])] * (n + 1) for _ in range(k + 1)]
+        dp[0][0] = (0.0, [])
+        for j in range(1, k + 1):
+            for i in range(j, n + 1):
+                for size_j in range(1, min(size, i) + 1):
+                    prev_cost, prev_cuts = dp[j - 1][i - size_j]
+                    if prev_cost == inf:
+                        continue
+                    cost = prev_cost + (size_j - target) ** 2
+                    if size_j == 1 and n > 1:
+                        cost += SINGLE_LINE_COST
+                    if i < n:
+                        cost += costs[i - 1]
+                    if cost < dp[j][i][0]:
+                        dp[j][i] = (cost, prev_cuts + [i])
+        total, cuts = dp[k][n]
+        if total == inf:
+            continue
+        total += EXTRA_SLIDE_COST * (k - k_min)
+        if best is None or total < best[0] - 1e-9:
+            best = (total, cuts)
+    if best is None:
+        return _chunks(items, size)
+    out, start = [], 0
+    for cut in best[1]:
+        out.append(items[start:cut])
+        start = cut
+    return out
+
+
+def _text_lines(section: Section) -> tuple[list[str], list[bool]]:
+    """Liedzeilen ohne Regiehinweise + je Zeile: endet danach ein Absatz der Vorlage?"""
+    lines: list[str] = []
+    ends: list[bool] = []
+    for ln in section.lines:
+        if not ln.strip():
+            if ends:
+                ends[-1] = True
+            continue
+        if cue_line(ln) is not None:
+            continue
+        lines.append(ln)
+        ends.append(False)
+    return lines, ends
+
+
 def cue_line(line: str) -> str | None:
     """Regiehinweis in Klammern allein auf der Zeile? -> Abschnittstyp („Bridge“) bzw. "" für „(REPEAT)“,
     None = Liedtext (auch „(We sing)“ oder „(Ich bin frei!)“ – nur bekannte Wörter gelten als Hinweis)."""
@@ -427,11 +516,22 @@ def section_slides(section: Section, lang_count: int, style: ExportStyle) -> lis
             else:
                 slides.append([("main", ln) for ln in lines])
         return slides or [[]]
-    lines = [ln for ln in section.lines if ln.strip() and cue_line(ln) is None]
+    lines, ends = _text_lines(section)
     if lang_count >= 2:
         pairs = [lines[i:i + lang_count] for i in range(0, len(lines), lang_count)]
-        return [_pair_slide(chunk, style) for chunk in _chunks(pairs, style.pairs_per_slide)]
-    return [[("main", ln) for ln in chunk] for chunk in _chunks(lines, style.lines_per_slide)]
+        if style.smart_breaks:
+            # Satzende am Original oder an der Übersetzung zählt; Absatzgrenze nach der letzten Zeile des Paars.
+            costs = [min(break_cost(t, ends[min(i * lang_count + len(p) - 1, len(ends) - 1)]) for t in p[:2])
+                     for i, p in enumerate(pairs)]
+            chunks = _smart_chunks(pairs, style.pairs_per_slide, costs)
+        else:
+            chunks = _chunks(pairs, style.pairs_per_slide)
+        return [_pair_slide(chunk, style) for chunk in chunks]
+    if style.smart_breaks:
+        chunks = _smart_chunks(lines, style.lines_per_slide, [break_cost(t, e) for t, e in zip(lines, ends)])
+    else:
+        chunks = _chunks(lines, style.lines_per_slide)
+    return [[("main", ln) for ln in chunk] for chunk in chunks]
 
 
 def section_type(label: str) -> str:

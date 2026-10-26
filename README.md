@@ -24,7 +24,7 @@ ProPresenter presentations and turns a service plan into a ready-to-use ProPrese
 | **Song upload** | Add songs without a `.sng` via drag & drop as a CCLI SongSelect file (`.usr`/`.txt`) or `.sng`. If a song with the same title exists, you can replace it (with backup), keep both or skip it. |
 | **Free text** | Paste lyrics; sections (verse, chorus, bridge …) are detected automatically, with live preview and formatting hints. `--` on its own line starts a new slide within a section. |
 | **Editing** | Edit any song (including ChurchTools songs) as free text; the import never overwrites edited songs and the original can be restored. |
-| **Export to ProPresenter** | `.sng` → `.pro` with configurable formatting (font, size, colours, slide breaks by line count or by paragraph with automatic font scaling, text box positioned with the mouse), slide preview and hot keys per song part (verse 1 = A, chorus = C, bridge = B …). |
+| **Export to ProPresenter** | `.sng` → `.pro` with configurable formatting (font, size, colours, slide breaks by line count (preferring sentence ends) or by paragraph with automatic font scaling, text box positioned with the mouse), slide preview and hot keys per song part (verse 1 = A, chorus = C, bridge = B …). |
 | **Library sync** | Compares the song database with your ProPresenter song library: what is missing, what has different lyrics – and updates it on request (with backup). |
 | **Self-updating** | The app checks GitHub Releases on start-up and updates itself. |
 
