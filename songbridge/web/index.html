@@ -1128,6 +1128,7 @@ const STYLE_FORM = [
   ["Folie", [
     ["slide_break", "Folienumbruch", "seg", [["lines", "Zeilenzahl"], ["paragraph", "Absatz"]]],
     ["lines_per_slide", "Zeilen pro Folie", "number", {min: 1, max: 12}],
+    ["smart_breaks", "An Satzenden umbrechen", "check"],
     ["pairs_per_slide", "Zeilenpaare (zweisprachig)", "number", {min: 1, max: 6}],
     ["background", "Hintergrund", "color"],
     ["blank_first", "Leere Folie vor dem Liedtext", "check"],
@@ -1230,7 +1231,7 @@ function fillStyleForm() {
   });
   // Umbruch nach Absatz: Zeilenzahl spielt keine Rolle, Verkleinern ist immer an.
   const para = style.slide_break === "paragraph";
-  ["lines_per_slide", "pairs_per_slide", "shrink_to_fit"].forEach(k => {
+  ["lines_per_slide", "smart_breaks", "pairs_per_slide", "shrink_to_fit"].forEach(k => {
     const el = $(`#st-form [data-k="${k}"]`);
     if (!el) return;
     el.disabled = para;

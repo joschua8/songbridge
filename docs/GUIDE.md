@@ -78,7 +78,10 @@ brings back the original ChurchTools version (it is backed up in `backup/origina
 Under **ProPresenter → Export & Formatierung → Folie → Folienumbruch** (slide break) you choose how lyrics are
 split into slides:
 
-- **Zeilenzahl** (line count): every section is split evenly into slides with "Zeilen pro Folie" (lines per slide).
+- **Zeilenzahl** (line count): every section is split into slides with at most "Zeilen pro Folie" (lines per slide).
+  With **"An Satzenden umbrechen"** (break at sentence ends, on by default) SongBridge prefers to start a new slide
+  after a full stop, `!`, `?`, then after `;`/`:`, then after a comma – and avoids breaking mid-sentence where
+  possible. Songs without punctuation are split evenly, as before.
 - **Absatz** (paragraph): every paragraph of the song file becomes exactly one slide. If the text does not fit
   into the text box, ProPresenter automatically scales the font down.
 
