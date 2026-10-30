@@ -85,6 +85,25 @@ split into slides:
 - **Absatz** (paragraph): every paragraph of the song file becomes exactly one slide. If the text does not fit
   into the text box, ProPresenter automatically scales the font down.
 
+## Finding duplicates in ProPresenter
+
+**ProPresenter → Duplikate** (duplicates) lists songs that exist more than once in your ProPresenter song library:
+same name (also "Song (2)", "Song - Kopie", "Song copy") or the same lyrics under a different name. Tick
+"Alle Bibliotheken durchsuchen" to search all libraries.
+
+For every group SongBridge suggests one file to keep (green "behalten"). Every other file is compared with it line
+by line: red = only in the kept file, green = only in this file; "gleicher Text" means the lyrics are identical.
+"Alle Duplikate auswählen" (select all duplicates) ticks every file except the suggested ones, and
+"… löschen" (delete) has to be clicked twice. Deleted files are not removed permanently but moved to
+`backup/geloescht/` in the data folder.
+
+## Text formatting
+
+Under **ProPresenter → Export & Formatierung** you can set, besides font, size and colour:
+**Kontur** (outline: on/off, width, colour), **Schatten** (shadow: colour, blur, distance, opacity) and
+**Abstände** (letter spacing, line spacing). The preview shows the result immediately; existing presentations change
+only after exporting them again ("Abgleich" compares lyrics only, not formatting).
+
 ## PowerPoint files in a service plan
 
 Presentations (.pptx/.ppt) attached to an event in ChurchTools are converted into images for the playlist.

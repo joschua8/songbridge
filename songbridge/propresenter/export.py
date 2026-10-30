@@ -149,6 +149,15 @@ class ExportStyle:
     box_color: str = "#000000"
     box_opacity: float = 1.0
     shadow: bool = False          # Textschatten (im Beispiel konfiguriert, aber aus)
+    shadow_color: str = "#000000"
+    shadow_blur: float = 3        # Unschärfe (Radius, pt)
+    shadow_distance: float = 6    # Versatz nach rechts unten (pt)
+    shadow_opacity: float = 0.9
+    outline: bool = False         # Kontur um die Buchstaben
+    outline_width: float = 3      # Konturstärke (pt)
+    outline_color: str = "#000000"
+    letter_spacing: float = 0     # Zeichenabstand (pt, negativ = enger)
+    line_spacing: float = 1.0     # Zeilenabstand (Vielfaches, 1 = normal)
     shrink_to_fit: bool = False   # ProPresenter verkleinert Schrift, wenn der Text nicht passt
     blank_first: bool = True      # leere Folie vor dem Liedtext
     title_slide: bool = True      # Folie mit dem Liedtitel vor dem Liedtext (nach der leeren Folie)
@@ -182,6 +191,15 @@ class ExportStyle:
         style.title_size = _clamp(style.title_size, 8, 300)
         style.meta_size = _clamp(style.meta_size, 8, 300)
         style.box_opacity = _clamp(style.box_opacity, 0, 1)
+        style.shadow_blur = _clamp(style.shadow_blur, 0, 50)
+        style.shadow_distance = _clamp(style.shadow_distance, 0, 100)
+        style.shadow_opacity = _clamp(style.shadow_opacity, 0, 1)
+        style.outline_width = _clamp(style.outline_width, 0.5, 20)
+        style.letter_spacing = _clamp(style.letter_spacing, -10, 50)
+        style.line_spacing = _clamp(style.line_spacing, 0.5, 3)
+        for name in ("shadow_color", "outline_color"):
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}", str(getattr(style, name))):
+                setattr(style, name, "#000000")
         # Textbox frei verschiebbar, aber mindestens 50 px groß und innerhalb der Folie.
         style.margin_top = _clamp(style.margin_top, 0, SLIDE_H - 50)
         style.margin_bottom = _clamp(style.margin_bottom, 0, SLIDE_H - 50 - style.margin_top)
@@ -330,6 +348,12 @@ def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = Non
     fam = lambda ts: FONTS.get(ts.font, FONTS["Helvetica"])[1]
     colors = [m.color] + ([t.color] if t.color != m.color else [])
     cf_main, cf_trans = 1, (1 if t.color == m.color else 2)
+    cf_outline = 0
+    if style.outline:
+        colors.append(style.outline_color)
+        cf_outline = len(colors)
+    # Zeichenabstand: \expnd in Viertelpunkt, \expndtw in Twips (1/20 pt)
+    spacing = f"\\expnd{round(style.letter_spacing * 4)}\\expndtw{round(style.letter_spacing * 20)}"
 
     header = (
         "{\\rtf1\\ansi\\ansicpg1252\\cocoartf2907\n"
@@ -345,8 +369,13 @@ def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = Non
     def start_reset(ts: TextStyle, font: str, cf: int) -> tuple[str, str]:
         on = font + ("\\b" if ts.bold else "") + ("\\i" if ts.italic else "")
         off = "\\f1" + ("\\b0" if ts.bold else "") + ("\\i0" if ts.italic else "")
-        return (f"{on}\\fs{_fs(ts.size)} \\cf{cf} \\expnd0\\expndtw0\\kerning0\n",
-                f"{off}\\fs24 \\cf0 \\kerning1\\expnd0\\expndtw0 \\\n")
+        stroke_on = stroke_off = ""
+        if style.outline:
+            # Cocoa-RTF: \strokewidth = Konturstärke in % der Schriftgröße × 20, negativ = Füllung + Kontur
+            stroke_on = f"\\outl0\\strokewidth{-round(style.outline_width / ts.size * 100 * 20)} \\strokec{cf_outline} "
+            stroke_off = "\\outl0\\strokewidth0 "
+        return (f"{on}\\fs{_fs(ts.size)} \\cf{cf} {stroke_on}{spacing}\\kerning0\n",
+                f"{off}\\fs24 \\cf0 {stroke_off}\\kerning1\\expnd0\\expndtw0 \\\n")
 
     styles = {
         "main": start_reset(m, "\\f0", cf_main),
@@ -359,7 +388,8 @@ def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = Non
                 "\\fs24 \\cf0 \\kerning1\\expnd0\\expndtw0 \\\n"),
     }
     text_styles = {"main": m, "trans": t, "title": title, "meta": meta}
-    para = f"\\pard{_ALIGN[style.align][0]}\\partightenfactor0\n\n"
+    line = "" if abs(style.line_spacing - 1) < 0.01 else f"\\sl{round(240 * style.line_spacing)}\\slmult1"
+    para = f"\\pard{_ALIGN[style.align][0]}{line}\\partightenfactor0\n\n"
     parts = [header]
     for i, (kind, text) in enumerate(paragraphs):
         start, reset = styles[kind]
@@ -698,6 +728,23 @@ class Template:
             text.attributes.paragraph_style.alignment = (
                 graphicsData_pb2.Graphics.Text.Attributes.Paragraph.Alignment.Value(_ALIGN[style.align][1]))
             text.shadow.enable = style.shadow
+            if style.shadow:
+                sr, sg, sb = _rgb(style.shadow_color)
+                sc = text.shadow.color
+                sc.red, sc.green, sc.blue, sc.alpha = sr / 255, sg / 255, sb / 255, 1
+                text.shadow.opacity = style.shadow_opacity
+                text.shadow.radius = style.shadow_blur
+                text.shadow.offset = style.shadow_distance
+                text.shadow.angle = 315
+            attrs = text.attributes
+            if style.outline:
+                attrs.stroke_width = style.outline_width
+                orr, og, ob = _rgb(style.outline_color)
+                oc = attrs.stroke_color
+                oc.red, oc.green, oc.blue, oc.alpha = orr / 255, og / 255, ob / 255, 1
+            if style.letter_spacing:
+                attrs.kerning = style.letter_spacing
+            attrs.paragraph_style.line_height_multiple = style.line_spacing
             text.scale_behavior = graphicsData_pb2.Graphics.Text.ScaleBehavior.Value(
                 "SCALE_BEHAVIOR_SCALE_FONT_DOWN" if style.scale_down else "SCALE_BEHAVIOR_NONE")
         return cue

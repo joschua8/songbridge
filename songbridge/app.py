@@ -944,6 +944,49 @@ def pp_diff():
     return jsonify({"dir": str(pp_dir), "rows": [r.to_json() for r in rows], "counts": counts})
 
 
+def _dupe_dirs(all_libraries: bool) -> list[tuple[str, Path]]:
+    """Ordner für die Duplikat-Suche: die Lieder-Bibliothek, mit all_libraries alle Bibliotheken."""
+    settings, root, docs = _library()
+    song_dir = settings.song_dir(docs)
+    dirs: list[tuple[str, Path]] = []
+    if song_dir and song_dir.is_dir():
+        dirs.append((playlist.nfc(song_dir.name), song_dir))
+    libs = root / "Libraries" if root else None
+    if all_libraries and libs and libs.is_dir():
+        for d in sorted(libs.iterdir(), key=lambda p: p.name.casefold()):
+            if d.is_dir() and not any(d.resolve() == x.resolve() for _, x in dirs):
+                dirs.append((playlist.nfc(d.name), d))
+    return dirs
+
+
+@app.get("/api/pp/duplicates")
+def pp_duplicates():
+    """Doppelte Präsentationen (gleicher Name ohne „(2)“/„Kopie“ oder gleicher Liedtext) inkl. Textvergleich."""
+    dirs = _dupe_dirs(request.args.get("all") == "1")
+    if not dirs:
+        return jsonify({"error": "Keine ProPresenter-Lieder-Bibliothek gefunden – bitte unter Einstellungen den Ordner angeben.",
+                        "needsSettings": True}), 400
+    groups = pp_sync.find_duplicates(dirs, preferred=dirs[0][0])
+    return jsonify({"dirs": [{"library": n, "path": str(d)} for n, d in dirs], "groups": groups})
+
+
+@app.post("/api/pp/duplicates/delete")
+def pp_duplicates_delete():
+    """Ausgewählte Präsentationen nach backup/geloescht/ verschieben. body: {paths: [...], all: bool}"""
+    data = request.get_json(silent=True) or {}
+    allowed = [d.resolve() for _, d in _dupe_dirs(True)]
+    paths = []
+    for raw in data.get("paths") or []:
+        p = Path(str(raw)).resolve()
+        if p.suffix.lower() != ".pro" or not p.is_file() or p.parent not in allowed:
+            return error(f"Datei nicht erlaubt oder nicht gefunden: {raw}")
+        paths.append(p)
+    if not paths:
+        return error("Keine Dateien ausgewählt.")
+    moved, failed, folder = pp_sync.delete_to_backup(paths, BACKUP_DIR)
+    return jsonify({"moved": moved, "failed": failed, "backup": str(folder) if folder else ""})
+
+
 @app.post("/api/pp/write")
 def pp_write():
     """Ausgewählte Lieder als .pro direkt in die Lieder-Bibliothek schreiben.

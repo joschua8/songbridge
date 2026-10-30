@@ -287,3 +287,139 @@ def write_to_library(rows: list[DbSong], pp_dir: Path, style, index: dict, songs
         except Exception as exc:
             failed.append(f"{s.name}: {exc}")
     return written, failed, stamp_dir
+
+
+# ------------------------------------------------------------------ Duplikate in ProPresenter
+
+# Kopie-Endungen, die ProPresenter/Finder/Explorer anhängen: „Lied (2)“, „Lied - Kopie“, „Lied copy 2“.
+_COPY_SUFFIX_RE = re.compile(r"\s*(?:\(\d+\)|-?\s*(?:kopie|copy)(?:\s*\(?\d+\)?)?)\s*$", re.IGNORECASE)
+MIN_CONTENT_LINES = 3   # gleicher Text zählt erst ab so vielen Zeilen als Duplikat (sonst „Halleluja“ & Co.)
+
+
+def base_title(stem: str) -> str:
+    """Dateiname ohne Kopie-Endungen („Lied (2)“ -> „Lied“)."""
+    name = nfc(stem).strip()
+    while True:
+        shorter = _COPY_SUFFIX_RE.sub("", name).strip()
+        if shorter == name or not shorter:
+            return name
+        name = shorter
+
+
+@dataclass
+class DupFile:
+    path: Path
+    library: str
+    lines: list[str] = field(default_factory=list)
+    error: str = ""
+
+    @property
+    def is_copy(self) -> bool:
+        return base_title(self.path.stem) != nfc(self.path.stem).strip()
+
+    def content_key(self) -> frozenset[str] | None:
+        norm = frozenset(n for n in (norm_line(x) for x in self.lines) if n)
+        return norm if len(norm) >= MIN_CONTENT_LINES else None
+
+
+def _line_diff(keep: list[str], other: list[str]) -> list[dict]:
+    """Zeilenvergleich (Groß/klein, Satzzeichen egal): same / del (nur im behaltenen) / add (nur in diesem)."""
+    import difflib
+    a, b = [norm_line(x) for x in keep], [norm_line(x) for x in other]
+    out = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if op == "equal":
+            out.extend({"t": "same", "text": x} for x in other[j1:j2])
+            continue
+        out.extend({"t": "del", "text": x} for x in keep[i1:i2])
+        out.extend({"t": "add", "text": x} for x in other[j1:j2])
+    return out
+
+
+def find_duplicates(dirs: list[tuple[str, Path]], preferred: str = "") -> list[dict]:
+    """Doppelte Präsentationen in den Bibliotheksordnern dirs = [(Bibliothek, Ordner)].
+
+    Zusammen gehören Dateien mit gleichem Namen (ohne Kopie-Endung, Groß/klein und Satzzeichen egal) oder gleichem
+    Liedtext. Je Gruppe wird eine Datei zum Behalten vorgeschlagen (ohne Kopie-Endung, in der bevorzugten
+    Bibliothek, mit dem meisten Text, zuletzt geändert); die anderen werden mit ihr verglichen.
+    """
+    files: list[DupFile] = []
+    for library, folder in dirs:
+        for f in pp_files(folder):
+            d = DupFile(f, library)
+            try:
+                _, d.lines, _ = pro_lines(f)
+            except Exception as exc:  # defekte Datei trotzdem anzeigen (Name kann doppelt sein)
+                d.error = f"nicht lesbar: {exc}"
+            files.append(d)
+
+    parent = list(range(len(files)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        parent[find(i)] = find(j)
+
+    seen: dict[tuple, int] = {}
+    for i, d in enumerate(files):
+        keys = [("name", norm_name(base_title(d.path.stem)))]
+        if (ck := d.content_key()) is not None:
+            keys.append(("text", ck))
+        for key in keys:
+            if key[1] and key in seen:
+                union(i, seen[key])
+            else:
+                seen.setdefault(key, i)
+
+    groups: dict[int, list[DupFile]] = {}
+    for i, d in enumerate(files):
+        groups.setdefault(find(i), []).append(d)
+
+    out = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda d: (d.is_copy, d.library != preferred, -len(d.lines), -d.path.stat().st_mtime))
+        keep = members[0]
+        rows = []
+        for d in members:
+            st = d.path.stat()
+            row = {
+                "path": str(d.path), "file": nfc(d.path.name), "library": d.library, "size": st.st_size,
+                "modified": st.st_mtime, "lines": len(d.lines), "keep": d is keep, "error": d.error,
+            }
+            if d is not keep:
+                diff = _line_diff(keep.lines, d.lines)
+                row["identical"] = not d.error and not keep.error and all(x["t"] == "same" for x in diff)
+                row["diff"] = [] if row["identical"] else diff[:400]
+            rows.append(row)
+        title = base_title(keep.path.stem)
+        out.append({"title": title, "files": rows,
+                    "identical": all(r.get("identical", True) for r in rows)})
+    out.sort(key=lambda g: g["title"].casefold())
+    return out
+
+
+def delete_to_backup(paths: list[Path], backup_dir: Path) -> tuple[list[str], list[str], Path | None]:
+    """Präsentationen in backup/geloescht/<Zeitstempel>/<Bibliothek>/ verschieben. -> (verschoben, Fehler, Ordner)."""
+    if not paths:
+        return [], [], None
+    target_root = backup_dir / "geloescht" / time.strftime("%Y-%m-%d_%H%M%S")
+    moved, failed = [], []
+    for p in paths:
+        try:
+            dest = target_root / p.parent.name / p.name
+            n = 2
+            while dest.exists():
+                dest = dest.with_name(f"{p.stem} ({n}){p.suffix}")
+                n += 1
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), str(dest))
+            moved.append(nfc(p.name))
+        except OSError as exc:
+            failed.append(f"{nfc(p.name)}: {exc}")
+    return moved, failed, target_root if moved else None
