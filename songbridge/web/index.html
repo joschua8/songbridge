@@ -270,10 +270,25 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
 .dupe-group { border-bottom: 1px solid var(--line); padding: 12px 14px; }
 .dupe-group:last-child { border-bottom: 0; }
 .dupe-group h4 { margin: 0 0 8px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.dupe-file { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: start; padding: 6px 0; }
+.dupe-file { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 6px 0; }
 .dupe-file + .dupe-file { border-top: 1px dashed var(--line); }
 .dupe-file .ttl { font-weight: 500; overflow-wrap: anywhere; }
 .dupe-file .sub { font-size: 12px; color: var(--muted); }
+.sbs { margin-top: 8px; width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 13px; }
+.sbs table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.sbs th { background: var(--code); text-align: left; font-weight: 600; padding: 6px 8px; font-size: 12px; overflow-wrap: anywhere; }
+.sbs td { padding: 2px 8px; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; border-left: 1px solid var(--line); }
+.sbs td:first-child { border-left: 0; }
+.sbs tr.group td { font-weight: 600; color: var(--accent); padding-top: 6px; }
+.sbs tr.slide td { height: 6px; padding: 0; border-top: 1px dashed var(--line); }
+.sbs .del { background: var(--danger-soft); } .sbs .add { background: var(--ok-soft); }
+.sbs .chg { background: var(--warn-soft); }
+.sbs .chg mark { background: rgba(255, 170, 0, .45); color: inherit; border-radius: 2px; }
+.sbs .empty { background: repeating-linear-gradient(45deg, transparent 0 6px, var(--code) 6px 12px); }
+.sbs tr.fold td { text-align: center; color: var(--muted); font-style: italic; background: var(--code); }
+.sbs .meta td { font-size: 12px; }
+.sbs .meta td.diffv { background: var(--warn-soft); }
+.sbs-scroll { max-height: 420px; overflow-y: auto; }
 .ldiff { margin-top: 6px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); border-radius: 6px; padding: 6px 8px; max-height: 260px; overflow-y: auto; }
 .ldiff div { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 4px; border-radius: 3px; }
 .ldiff .add { background: var(--ok-soft); color: var(--ok); }
@@ -614,7 +629,9 @@ Refrain</pre>
       <div class="toolbar">
         <input type="search" id="du-q" placeholder="Lieder filtern …" autocomplete="off">
         <span class="spacer"></span>
-        <label class="check" style="margin:0;font-size:13px"><input type="checkbox" id="du-same"> Nur Text-Unterschiede zeigen</label>
+        <label class="check" style="margin:0;font-size:13px"><input type="checkbox" id="du-same"> Nur Gruppen mit Unterschieden</label>
+        <label class="check" style="margin:0;font-size:13px" title="Gleiche Zeilen im Vergleich zusammenklappen"><input type="checkbox" id="du-fold"> Gleiche Zeilen einklappen</label>
+        <button class="btn small" id="du-sel-ident" title="Nur Kopien, die Zeichen für Zeichen identisch sind (Text, Aufbau, Formatierung)">Identische auswählen</button>
         <button class="btn small" id="du-sel-all">Alle Duplikate auswählen</button>
         <button class="btn small" id="du-sel-none">Auswahl aufheben</button>
       </div>
@@ -625,9 +642,11 @@ Refrain</pre>
       </div>
     </div>
     <div id="du-result" style="margin-top:12px"></div>
-    <p class="muted" style="font-size:12px">„Alle Duplikate auswählen“ wählt in jeder Gruppe alle Dateien außer der vorgeschlagenen (grün, „behalten“).
-      Gelöschte Dateien werden nicht endgültig entfernt, sondern nach <code>backup/geloescht/</code> verschoben.
-      Rot = steht nur in der behaltenen Datei, grün = steht nur in dieser Datei. ProPresenter übernimmt die Änderung in der Regel sofort; sonst neu starten.</p>
+    <p class="muted" style="font-size:12px">Links steht immer die vorgeschlagene Datei („behalten“), rechts die Kopie – verglichen wird Zeichen für Zeichen,
+      dazu Folienaufteilung, Arrangement und Formatierung. Rot = nur links, grün = nur rechts, gelb = geändert (geänderte Wörter markiert).
+      „Identische auswählen“ wählt nur Kopien ohne jeden Unterschied, „Alle Duplikate auswählen“ alle Dateien außer den vorgeschlagenen.
+      Gelöschte Präsentationen werden sofort aus der ProPresenter-Bibliothek (dem Bibliotheksordner) entfernt; eine Sicherheitskopie landet in
+      <code>backup/geloescht/</code>. Zeigt ProPresenter ein gelöschtes Lied noch an, ProPresenter einmal neu starten.</p>
   </section>
 
   <!-- ======================= Einstellungen ======================= -->
@@ -2268,45 +2287,86 @@ function dupeGroups() {
   if (!dupes) return [];
   const q = $("#du-q").value.trim().toLowerCase();
   return dupes.groups.filter(g => (!q || (g.title + " " + g.files.map(f => f.file).join(" ")).toLowerCase().includes(q))
-    && (!$("#du-same").checked || !g.identical));
+    && (!$("#du-same").checked || g.status !== "identical"));
 }
 
-function diffHtml(diff) {
-  // gleiche Zeilen nur als Kontext rund um Änderungen zeigen
-  const show = diff.map((d, i) => d.t !== "same" || diff.slice(Math.max(0, i - 2), i + 3).some(x => x.t !== "same"));
-  let out = "", skipped = 0;
-  diff.forEach((d, i) => {
-    if (!show[i]) { skipped++; return; }
-    if (skipped) { out += `<div class="gap">… ${skipped} gleiche Zeile(n) …</div>`; skipped = 0; }
-    out += `<div class="${d.t}">${d.t === "add" ? "+ " : d.t === "del" ? "− " : "  "}${esc(d.text)}</div>`;
-  });
-  if (skipped) out += `<div class="gap">… ${skipped} gleiche Zeile(n) …</div>`;
-  return out;
+// Wortweise markieren, was sich zwischen a und b geändert hat (für gelbe Zeilen).
+function wordDiff(a, b) {
+  const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+  const n = A.length, m = B.length, L = Array.from({length: n + 1}, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0, l = "", r = "";
+  while (i < n || j < m) {
+    if (i < n && j < m && A[i] === B[j]) { l += esc(A[i]); r += esc(B[j]); i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) { r += `<mark>${esc(B[j])}</mark>`; j++; }
+    else { l += `<mark>${esc(A[i])}</mark>`; i++; }
+  }
+  return [l, r];
 }
+
+function sbsHtml(keep, f) {
+  const metaKeys = [["Folien", x => String(x.slides)], ["Arrangement", x => (x.arrangement || []).join(" · ") || "–"],
+    ...Object.keys(keep.format || {}).map(k => [k, x => [].concat((x.format || {})[k] || "–").join(", ")])];
+  const meta = metaKeys.map(([label, get]) => {
+    const l = get(keep), r = get(f), d = l !== r ? ' class="diffv"' : "";
+    return `<tr class="meta"><td${d}><b>${esc(label)}:</b> ${esc(l)}</td><td${d}><b>${esc(label)}:</b> ${esc(r)}</td></tr>`;
+  }).join("");
+  const fold = $("#du-fold").checked, pairs = f.pairs || [];
+  const near = i => pairs.slice(Math.max(0, i - 2), i + 3).some(p => p.op !== "same");
+  let body = "", hidden = 0;
+  const flush = () => { if (hidden) { body += `<tr class="fold"><td colspan="2">… ${hidden} gleiche Zeile(n) …</td></tr>`; hidden = 0; } };
+  pairs.forEach((p, i) => {
+    if (fold && p.op === "same" && !near(i)) { hidden++; return; }
+    flush();
+    const row = p.l || p.r;
+    if (row.k === "slide") { body += `<tr class="slide"><td></td><td></td></tr>`; return; }
+    const cls = row.k === "group" ? "group" : "";
+    if (p.op === "same") { body += `<tr class="${cls}"><td>${esc(p.l.text)}</td><td>${esc(p.r.text)}</td></tr>`; return; }
+    if (p.op === "change") {
+      const [l, r] = wordDiff(p.l.text, p.r.text);
+      body += `<tr class="${cls}"><td class="chg">${l}</td><td class="chg">${r}</td></tr>`;
+    } else if (p.op === "del") body += `<tr class="${cls}"><td class="del">${esc(p.l.text) || "(Folienwechsel)"}</td><td class="empty"></td></tr>`;
+    else body += `<tr class="${cls}"><td class="empty"></td><td class="add">${esc(p.r.text) || "(Folienwechsel)"}</td></tr>`;
+  });
+  flush();
+  return `<div class="sbs"><table><colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+    <tr><th>◀ ${esc(keep.file)} <span class="badge covered">behalten</span></th><th>▶ ${esc(f.file)}</th></tr>${meta}</table>
+    <div class="sbs-scroll"><table><colgroup><col style="width:50%"><col style="width:50%"></colgroup>${body}</table></div></div>`;
+}
+
+const DUPE_STATUS = {
+  identical: '<span class="badge covered" title="Text, Folien, Arrangement und Formatierung gleich">identisch</span>',
+  layout: '<span class="badge missing" title="Text gleich, aber Folienaufteilung, Arrangement oder Formatierung anders">nur Formatierung/Aufbau anders</span>',
+  text: '<span class="badge danger">Text anders</span>',
+};
 
 function renderDupes() {
   if (!dupes) return;
   const all = dupes.groups, extra = all.reduce((n, g) => n + g.files.length - 1, 0);
-  const differ = all.filter(g => !g.identical).length;
+  const files = all.flatMap(g => g.files.filter(f => !f.keep));
+  const nIdent = files.filter(f => f.status === "identical").length, nText = files.filter(f => f.status === "text").length;
   $("#du-stats").innerHTML = `<div class="stat info"><b>${all.length}</b><span>Lieder mehrfach</span></div>
     <div class="stat warn"><b>${extra}</b><span>überzählige Dateien</span></div>
-    <div class="stat ok"><b>${all.length - differ}</b><span>Gruppen mit gleichem Text</span></div>
-    <div class="stat danger"><b>${differ}</b><span>Gruppen mit Text-Unterschieden</span></div>`;
+    <div class="stat ok"><b>${nIdent}</b><span>davon identisch</span></div>
+    <div class="stat danger"><b>${nText}</b><span>davon mit Text-Unterschieden</span></div>`;
   const fmt = t => new Date(t * 1000).toLocaleString("de-DE", {dateStyle: "short", timeStyle: "short"});
   const groups = dupeGroups();
-  $("#du-groups").innerHTML = groups.map(g => `<div class="dupe-group">
-      <h4>${esc(g.title)} <span class="badge">${g.files.length} Dateien</span>
-        ${g.identical ? '<span class="badge covered">gleicher Text</span>' : '<span class="badge danger">Text unterschiedlich</span>'}</h4>
+  $("#du-groups").innerHTML = groups.map(g => {
+    const keep = g.files.find(f => f.keep);
+    return `<div class="dupe-group">
+      <h4>${esc(g.title)} <span class="badge">${g.files.length} Dateien</span> ${DUPE_STATUS[g.status] || ""}</h4>
       ${g.files.map(f => `<div class="dupe-file">
         <span><input type="checkbox" data-path="${esc(f.path)}" ${duSel.has(f.path) ? "checked" : ""}></span>
         <div style="min-width:0"><div class="ttl">${esc(f.file)}</div>
-          <div class="sub">${esc(f.library)} · geändert ${esc(fmt(f.modified))} · ${f.lines} Textzeilen · ${Math.max(1, Math.round(f.size / 1024))} KB
+          <div class="sub">${esc(f.library)} · geändert ${esc(fmt(f.modified))} · ${f.slides} Folien · ${f.lines} Textzeilen · ${Math.max(1, Math.round(f.size / 1024))} KB
             ${f.error ? ` · <span style="color:var(--danger)">${esc(f.error)}</span>` : ""}</div>
-          ${f.diff && f.diff.length ? `<div class="ldiff">${diffHtml(f.diff)}</div>` : ""}</div>
-        <div>${f.keep ? '<span class="badge covered" title="Vorschlag: diese Datei behalten">behalten</span>'
-          : f.identical ? '<span class="badge">gleicher Text</span>' : '<span class="badge danger">Text abweichend</span>'}</div>
-      </div>`).join("")}</div>`).join("")
-    || `<p class="muted" style="padding:24px;text-align:center">${all.length ? "Keine Treffer für den Filter." : "Keine Duplikate gefunden. 🎉"}</p>`;
+          ${f.keep ? "" : f.status === "identical"
+            ? `<details class="sub" style="margin-top:4px"><summary>Zeichen für Zeichen identisch – Vergleich trotzdem anzeigen</summary>${sbsHtml(keep, f)}</details>`
+            : sbsHtml(keep, f)}</div>
+        <div>${f.keep ? '<span class="badge covered" title="Vorschlag: diese Datei behalten">behalten</span>' : DUPE_STATUS[f.status] || ""}</div>
+      </div>`).join("")}</div>`;
+  }).join("") || `<p class="muted" style="padding:24px;text-align:center">${all.length ? "Keine Treffer für den Filter." : "Keine Duplikate gefunden. 🎉"}</p>`;
   renderDupeButtons();
 }
 
@@ -2322,6 +2382,8 @@ $("#du-check").onclick = loadDupes;
 $("#du-all").onchange = loadDupes;
 $("#du-q").oninput = renderDupes;
 $("#du-same").onchange = renderDupes;
+$("#du-fold").onchange = renderDupes;
+$("#du-sel-ident").onclick = () => { dupeGroups().forEach(g => g.files.forEach(f => { if (!f.keep && f.status === "identical") duSel.add(f.path); })); renderDupes(); };
 $("#du-groups").onchange = e => {
   const cb = e.target.closest("input[data-path]"); if (!cb) return;
   cb.checked ? duSel.add(cb.dataset.path) : duSel.delete(cb.dataset.path);
@@ -2342,8 +2404,8 @@ $("#du-delete").onclick = async () => {
   try {
     const res = await api("/api/pp/duplicates/delete", {method: "POST", body: {paths: [...duSel]}});
     duSel.clear();
-    $("#du-result").innerHTML = `<div class="notice ${res.failed.length ? "warn" : "ok"}">${res.moved.length} Datei(en) gelöscht
-      (gesichert in <code>${esc(res.backup)}</code>).
+    $("#du-result").innerHTML = `<div class="notice ${res.failed.length ? "warn" : "ok"}">${res.moved.length} Präsentation(en) aus der ProPresenter-Bibliothek gelöscht
+      (Sicherheitskopie in <code>${esc(res.backup)}</code>).
       ${res.failed.length ? `<ul style="margin:6px 0 0;padding-left:18px">${res.failed.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}</div>`;
     diffStale = true; duStale = true;
     const msg = $("#du-result").innerHTML;

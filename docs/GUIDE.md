@@ -91,11 +91,17 @@ split into slides:
 same name (also "Song (2)", "Song - Kopie", "Song copy") or the same lyrics under a different name. Tick
 "Alle Bibliotheken durchsuchen" to search all libraries.
 
-For every group SongBridge suggests one file to keep (green "behalten"). Every other file is compared with it line
-by line: red = only in the kept file, green = only in this file; "gleicher Text" means the lyrics are identical.
-"Alle Duplikate auswählen" (select all duplicates) ticks every file except the suggested ones, and
-"… löschen" (delete) has to be clicked twice. Deleted files are not removed permanently but moved to
-`backup/geloescht/` in the data folder.
+For every group SongBridge suggests one file to keep (green "behalten"). Every other file is shown **side by side**
+with it, like a Git diff: left = the file to keep, right = the copy. The comparison is exact (character by character,
+including punctuation) and also covers slide split, arrangement and formatting (fonts, sizes, colours, outline).
+Red = only on the left, green = only on the right, yellow = changed (changed words highlighted). Each copy is marked
+**identisch** (no difference at all), **nur Formatierung/Aufbau anders** (same text, different layout/formatting) or
+**Text anders** (different text). "Gleiche Zeilen einklappen" (fold identical lines) hides unchanged lines.
+
+"Identische auswählen" ticks only copies without any difference, "Alle Duplikate auswählen" ticks every file except
+the suggested ones; "… löschen" (delete) has to be clicked twice. Deleted presentations are removed from the
+ProPresenter library folder immediately; a safety copy is kept in `backup/geloescht/` in the data folder. If
+ProPresenter still lists a deleted song, restart ProPresenter once.
 
 ## Text formatting
 
