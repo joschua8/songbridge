@@ -11,6 +11,7 @@ Aufbau einer .sng-Datei (UTF-8 mit BOM):
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -458,3 +459,76 @@ def _norm_lines(lines: list[str]) -> str:
 
 def norm_title(title: str) -> str:
     return re.sub(r"[^\w]+", " ", title.casefold()).strip()
+
+
+# ------------------------------------------------------------------ Zweisprachigkeit erkennen
+
+_WORD_RE = re.compile(r"[a-zäöüß']+")
+_DE_WORDS = set("""und der die das ist ich du er sie wir ihr nicht mit dich dir mich mir dein deine deinen deinem deiner
+mein meine meinen meinem unser unsere uns euch ein eine einen einem auf für von zu im in ist bist sind sein wird wie was
+wer wo auch noch nur schon so dann denn weil wenn aber oder doch hier da dort alle alles immer nie gott herr jesus
+geist liebe gnade ewig ewigkeit himmel erde licht leben herz herzen heilig anbeten loben preis ehre singen will kann
+wollen gib gibt kommt komm durch über unter vor nach bei ohne gegen um aus des dem den""".split())
+_EN_WORDS = set("""and the is i you he she we they not with me my your yours our us a an on for of to in are be am will
+how what who where also only so then because if but or here there all always never god lord jesus spirit love grace
+forever heaven earth light life heart hearts holy worship praise glory sing can come through over under before after
+by without against at from it its this that these those was were has have do does let oh name""".split())
+
+
+def line_language(line: str) -> str:
+    """„de“, „en“ oder „“ (unklar) – grob über typische Wörter und Umlaute."""
+    words = _WORD_RE.findall(line.casefold())
+    if not words:
+        return ""
+    de = sum(w in _DE_WORDS for w in words) + 2 * sum(any(c in w for c in "äöüß") for w in words)
+    en = sum(w in _EN_WORDS for w in words) + sum(w.endswith("'s") or w in ("i'm", "you're", "it's") for w in words)
+    if de > en and de >= 1:
+        return "de"
+    if en > de and en >= 1:
+        return "en"
+    return ""
+
+
+LANG_NAMES = {"de": "Deutsch", "en": "Englisch"}
+
+
+def detect_bilingual(sections: list[Section]) -> tuple[bool, str]:
+    """Wechseln sich in allen Abschnitten die Sprachen zeilenweise ab (Original / Übersetzung)?
+
+    -> (zweisprachig?, Erklärung). Bedingungen: jeder Abschnitt mit Text hat eine gerade Zeilenzahl, mindestens
+    zwei Zeilenpaare lassen sich einer Sprache zuordnen, und davon wechseln mindestens 80 % die Sprache – immer in
+    derselben Richtung (z. B. Deutsch oben, Englisch darunter).
+    """
+    pairs, odd = [], []
+    for sec in sections:
+        lines = [ln for ln in sec.lines if ln.strip()]
+        if not lines:
+            continue
+        if len(lines) % 2:
+            odd.append(sec.label)
+            continue
+        pairs.extend((line_language(lines[i]), line_language(lines[i + 1])) for i in range(0, len(lines), 2))
+    if odd or len(pairs) < 2:
+        return False, ""
+    known = [(a, b) for a, b in pairs if a and b]
+    if len(known) < 2 or len(known) < 0.5 * len(pairs):
+        return False, ""
+    directions = Counter(p for p in known if p[0] != p[1])
+    if not directions:
+        return False, ""
+    (first, second), hits = directions.most_common(1)[0]
+    if hits < 0.8 * len(known):
+        return False, ""
+    return True, (f"Die Zeilen wechseln sich ab: {LANG_NAMES[first]} (Original) / {LANG_NAMES[second]} (Übersetzung) "
+                  f"– {hits} von {len(pairs)} Zeilenpaaren eindeutig.")
+
+
+def bilingual_hints(sections: list[Section]) -> list[str]:
+    """Hinweise für zweisprachige Lieder: Abschnitte mit ungerader Zeilenzahl passen nicht in Paare."""
+    out = []
+    for sec in sections:
+        n = sum(1 for ln in sec.lines if ln.strip())
+        if n % 2:
+            out.append(f"„{sec.label}“ hat {n} Zeilen – bei zweisprachigen Liedern braucht jede Originalzeile "
+                       "eine Übersetzungszeile darunter.")
+    return out

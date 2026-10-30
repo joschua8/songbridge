@@ -65,7 +65,14 @@ Unter **Lieder → Hochladen** Dateien aus CCLI SongSelect (`.usr` oder `.txt`) 
 Ohne Datei geht es über **Lieder → Freitext**: Titel und Liedtext eintragen. Wichtig für die richtige
 Aufteilung: Leerzeile zwischen den Abschnitten, der Name des Abschnitts (`Strophe 1`, `Refrain`,
 `Bridge` …) allein in der ersten Zeile, Wiederholungen nur als Name (z. B. `Refrain`) statt den Text
-noch einmal zu tippen. Eine Zeile nur mit `--` beginnt innerhalb eines Abschnitts eine neue Folie. Die Anleitung mit Beispiel steht direkt über dem Textfeld, rechts daneben
+noch einmal zu tippen. Eine Zeile nur mit `--` beginnt innerhalb eines Abschnitts eine neue Folie.
+
+**Zweisprachige Lieder:** In jedem Abschnitt abwechselnd eine Zeile Original und darunter ihre Übersetzung schreiben
+und das Häkchen **„Zweisprachig (Zeilen abwechselnd: Original / Übersetzung)“** setzen. Erkennt SongBridge, dass
+sich deutsche und englische Zeilen abwechseln, setzt es das Häkchen selbst und zeigt einen Hinweis; die
+Übersetzungszeilen erscheinen in der Vorschau kursiv, damit du die Zuordnung prüfen kannst. Ein von Hand gesetztes
+oder entferntes Häkchen ändert SongBridge nicht mehr. Beim Export bekommt die Übersetzung die Formatierung
+„Übersetzung (2. Sprache)“, und Original und Übersetzung bleiben auf derselben Folie. Die Anleitung mit Beispiel steht direkt über dem Textfeld, rechts daneben
 siehst du sofort, wie das Lied gespeichert wird.
 
 ## Lieder bearbeiten

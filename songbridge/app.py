@@ -42,7 +42,9 @@ from songbridge.songs import songselect
 from songbridge.songs.sng import (
     EDITED_KEY,
     Song,
+    bilingual_hints,
     build_sng,
+    detect_bilingual,
     freetext_hints,
     is_edited_file,
     is_manual_file,
@@ -228,8 +230,12 @@ def upload_songs():
 
 
 def _freetext_song(data: dict) -> tuple[Song, list[str]]:
-    """Formular „Freitext“ -> (Lied, Hinweise). Abschnitte/Reihenfolge wie sng.parse_freetext."""
+    """Formular „Freitext“ -> (Lied, Hinweise). Abschnitte/Reihenfolge wie sng.parse_freetext.
+
+    data.bilingual: Zeilen wechseln sich ab (Original / Übersetzung) -> #LangCount=2.
+    """
     sections, order, warnings = parse_freetext(str(data.get("text") or ""))
+    bilingual = bool(data.get("bilingual"))
     song = Song(
         title=" ".join(str(data.get("title") or "").split()),
         author=" ".join(str(data.get("author") or "").split()),
@@ -237,8 +243,9 @@ def _freetext_song(data: dict) -> tuple[Song, list[str]]:
         copyright=" ".join(str(data.get("copyright") or "").split()),
         sections=sections,
         order=order,
+        lang_count=2 if bilingual else 1,
     )
-    return song, warnings + freetext_hints(sections)
+    return song, warnings + freetext_hints(sections) + (bilingual_hints(sections) if bilingual else [])
 
 
 @app.post("/api/songs/freetext/preview")
@@ -246,8 +253,10 @@ def freetext_preview():
     """Erkannte Abschnitte in Reihenfolge (mit Wiederholungen) + Hinweise, für die Live-Vorschau."""
     song, warnings = _freetext_song(request.get_json(silent=True) or {})
     by_label = {s.label: s for s in song.sections}
+    detected, reason = detect_bilingual(song.sections)
     return jsonify({"sections": [{"label": l, "lines": by_label[l].lines} for l in song.order if l in by_label],
-                    "warnings": warnings})
+                    "warnings": warnings, "langCount": song.lang_count,
+                    "detected": {"bilingual": detected, "reason": reason}})
 
 
 @app.post("/api/songs/freetext")
@@ -280,14 +289,18 @@ def update_song(song_id: str):
     if not path.exists():
         return error("Lied nicht gefunden", 404)
     old = read_sng(path)
-    song, warnings = _freetext_song(request.get_json(silent=True) or {})
+    data = request.get_json(silent=True) or {}
+    song, warnings = _freetext_song(data)
     if not song.title:
         return error("Bitte einen Titel angeben.")
     if not any(s.lines for s in song.sections):
         return error("Bitte den Liedtext eingeben.")
     if song.ccli and not song.ccli.isdigit():
         return error("Die CCLI-Liednummer besteht nur aus Ziffern.")
-    song.headers, song.editor, song.lang_count = dict(old.headers), old.editor, old.lang_count
+    song.headers, song.editor = dict(old.headers), old.editor
+    if "bilingual" not in data or (data.get("bilingual") and old.lang_count > 2):
+        song.lang_count = old.lang_count  # ohne Häkchen-Angabe bzw. bei 3+ Sprachen: wie bisher
+    song.headers.pop("LangCount", None)  # kommt aus song.lang_count
     target = path
     if old.manual:
         target = path.parent / f"{dl.safe_filename(song.title)}.sng"
