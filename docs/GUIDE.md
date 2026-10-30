@@ -63,6 +63,12 @@ Without a file, use **Lieder → Freitext** (Songs → Free text): enter the tit
 recognised correctly: leave an empty line between sections, put the section name (`Strophe 1`/`Verse 1`,
 `Refrain`/`Chorus`, `Bridge` …) alone on the first line, and write repetitions only as the name (e.g. `Chorus`)
 instead of typing the lyrics again. A line containing only `--` starts a new slide within the same section.
+
+**Bilingual songs:** in every section write one line of the original and below it its translation, alternating, and
+tick **"Zweisprachig (Zeilen abwechselnd: Original / Übersetzung)"** (bilingual). If SongBridge detects alternating
+German and English lines, it ticks the box itself and shows a note; translation lines are shown in italics in the
+preview so you can check the pairing. A box you ticked or unticked yourself is never changed automatically. On
+export, the translation gets the "Übersetzung (2. Sprache)" formatting and original and translation stay on the same slide.
 The instructions with an example are shown right above the text box; on the right you immediately see how the
 song will be saved.
 

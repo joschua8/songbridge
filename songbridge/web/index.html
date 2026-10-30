@@ -408,6 +408,8 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
             <li><b>Wiederholung:</b> nur den Namen als eigenen Abschnitt schreiben (z. B. <code>Refrain</code> mit Leerzeile davor und danach) –
               den Text nicht noch einmal abtippen. Kein „2x“ oder „(Refrain)“ in die Liedzeilen schreiben.</li>
             <li>Jede Zeile hier = eine Zeile auf der Folie. Lange Zeilen lieber teilen; Folien werden automatisch nach „Zeilen pro Folie“ aufgeteilt.</li>
+            <li><b>Zweisprachig:</b> in jedem Abschnitt abwechselnd eine Zeile Original, darunter ihre Übersetzung – und das Häkchen
+              „Zweisprachig“ unter dem Textfeld setzen (SongBridge schlägt es bei Deutsch/Englisch automatisch vor).</li>
             <li><b>Eigene Folienumbrüche:</b> <code>--</code> allein in einer Zeile beginnt innerhalb eines Abschnitts eine neue Folie.
               Wirkt beim Export mit „Folienumbruch: Absatz“ (ProPresenter → Formatierung).</li>
             <li>Ohne Namen gilt ein Abschnitt als nächste Strophe; <code>1. Text …</code> am Anfang = Strophe 1. Keine Akkorde.</li>
@@ -431,6 +433,8 @@ Bridge
 Refrain</pre>
         </details>
         <div class="field"><label for="ft-text">Liedtext *</label><textarea id="ft-text" spellcheck="false"></textarea></div>
+        <label class="check" style="font-size:13px;margin-bottom:4px"><input type="checkbox" id="ft-bilingual"> Zweisprachig (Zeilen abwechselnd: Original / Übersetzung)</label>
+        <div class="muted" id="ft-bi-hint" style="font-size:12px;margin:0 0 10px 24px"></div>
         <div class="btn-row">
           <button class="btn primary" id="ft-save">Lied speichern</button>
           <button class="btn" id="ft-clear">Leeren</button>
@@ -848,9 +852,10 @@ function highlight(text) {
 }
 
 function renderSections(sections, langCount = 1) {
-  return sections.map(sec => `<div class="section"><h4>${esc(sec.label)}</h4><p>${
-    sec.lines.map((l, i) => langCount > 1 && i % langCount ? `<span class="alt">${highlight(l)}</span>` : highlight(l)).join("\n")
-  }</p></div>`).join("");
+  // Übersetzungszeilen (2., 4. … Textzeile) kursiv; Leerzeilen (Folienumbrüche) zählen nicht mit
+  return sections.map(sec => { let n = 0; return `<div class="section"><h4>${esc(sec.label)}</h4><p>${
+    sec.lines.map(l => !l.trim() ? "" : langCount > 1 && (n++) % langCount ? `<span class="alt">${highlight(l)}</span>` : highlight(l)).join("\n")
+  }</p></div>`; }).join("");
 }
 
 function select(id, scroll = true) {
@@ -996,9 +1001,17 @@ $("#up-results").onclick = async e => {
 
 /* ---------------- Freitext ---------------- */
 const FT_FIELDS = ["title", "author", "copyright", "ccli", "text"];
-const ftData = () => Object.fromEntries(FT_FIELDS.map(k => [k, $("#ft-" + k).value]));
+const ftData = () => ({...Object.fromEntries(FT_FIELDS.map(k => [k, $("#ft-" + k).value])),
+  bilingual: $("#ft-bilingual").checked, bilingualTouched: ftBiTouched});
+// Häkchen „Zweisprachig“: von Hand gesetzt (dann nie automatisch ändern) oder automatisch vorgeschlagen
+let ftBiTouched = false, ftBiAuto = false;
 let ftEdit = null;  // {id, title} beim Bearbeiten eines vorhandenen Liedes, sonst neues Lied
-const ftFill = data => FT_FIELDS.forEach(k => $("#ft-" + k).value = data[k] || "");
+const ftFill = data => {
+  FT_FIELDS.forEach(k => $("#ft-" + k).value = data[k] || "");
+  $("#ft-bilingual").checked = !!data.bilingual;
+  ftBiTouched = !!data.bilingualTouched; ftBiAuto = !!data.bilingual && !ftBiTouched;
+  $("#ft-bi-hint").textContent = "";
+};
 function ftDraft() { try { return JSON.parse(store.get("freetext") || "{}") || {}; } catch { return {}; } }
 
 function setEditMode(song) {
@@ -1019,7 +1032,8 @@ function setEditMode(song) {
 async function editSong(id) {
   if (!ftEdit) try { store.set("freetext", JSON.stringify(ftData())); } catch {}  // Entwurf für neues Lied merken
   const song = await api("/api/songs/" + id.split("/").map(encodeURIComponent).join("/"));
-  ftFill({...song, text: song.freetext});
+  ftFill({...song, text: song.freetext, bilingual: song.langCount > 1});
+  ftBiTouched = true;  // beim Bearbeiten gilt die gespeicherte Einstellung
   setEditMode(song);
   $("#ft-info").textContent = "";
   showTab("freetext");
@@ -1051,6 +1065,16 @@ async function refreshFreetext() {
     }
     try {
       const data = await api("/api/songs/freetext/preview", {method: "POST", body: ftData()});
+      // Automatischer Vorschlag „Zweisprachig“, solange das Häkchen nicht von Hand gesetzt wurde
+      const bi = $("#ft-bilingual");
+      if (!ftBiTouched && data.detected) {
+        if (data.detected.bilingual && !bi.checked) { bi.checked = true; ftBiAuto = true; return refreshFreetext(); }
+        if (!data.detected.bilingual && bi.checked && ftBiAuto) { bi.checked = false; ftBiAuto = false; return refreshFreetext(); }
+      }
+      $("#ft-bi-hint").textContent = bi.checked
+        ? (ftBiAuto ? "Automatisch erkannt: " + data.detected.reason + " Bitte prüfen – Übersetzungszeilen sind rechts kursiv."
+                    : "Übersetzungszeilen sind rechts kursiv – so prüfst du, ob die Zuordnung stimmt.")
+        : (data.detected && data.detected.bilingual ? "Sieht zweisprachig aus: " + data.detected.reason : "");
       $("#ft-warn").innerHTML = data.warnings.map(w => `<li class="notice warn" style="margin:0">${esc(w)}</li>`).join("");
       $("#ft-order").innerHTML = data.sections.length
         ? '<span class="muted" style="font-size:12px;margin-right:4px">Reihenfolge:</span>' + data.sections.map(s => `<span class="badge">${esc(s.label)}</span>`).join("")
@@ -1058,18 +1082,20 @@ async function refreshFreetext() {
       // Jeden Abschnitt nur einmal mit Text zeigen, Wiederholungen nur in der Reihenfolge
       const seen = new Set();
       $("#ft-preview").innerHTML = `<div class="sections">${renderSections(data.sections.filter(s => !seen.has(s.label) && seen.add(s.label))
-        .map(s => s.lines.length ? s : {...s, lines: ["(ohne Text – leere Folie)"]}))}</div>`;
+        .map(s => s.lines.length ? s : {...s, lines: ["(ohne Text – leere Folie)"]}), data.langCount || 1)}</div>`;
     } catch (err) {
       $("#ft-preview").innerHTML = `<div class="notice error">${esc(err.message)}</div>`;
     }
   }, 250);
 }
 FT_FIELDS.forEach(k => $("#ft-" + k).addEventListener("input", refreshFreetext));
+$("#ft-bilingual").addEventListener("change", () => { ftBiTouched = true; ftBiAuto = false; refreshFreetext(); });
 ftFill(ftDraft());  // Entwurf (neues Lied) bleibt im Browser erhalten
 if ($("#ft-text").value.trim()) refreshFreetext();
 $("#ft-cancel").onclick = () => { const id = ftEdit.id; endEdit(); showTab("songs"); select(id); };
 $("#ft-clear").onclick = () => {
   FT_FIELDS.forEach(k => $("#ft-" + k).value = "");
+  $("#ft-bilingual").checked = false; ftBiTouched = ftBiAuto = false; $("#ft-bi-hint").textContent = "";
   $("#ft-info").textContent = "";
   refreshFreetext();
 };
@@ -1106,6 +1132,7 @@ async function saveFreetext(mode) {
     return;
   }
   FT_FIELDS.forEach(k => $("#ft-" + k).value = "");
+  $("#ft-bilingual").checked = false; ftBiTouched = ftBiAuto = false;
   refreshFreetext();
   await loadSongs();
   $("#ft-info").innerHTML = `<span style="color:var(--ok)">✓</span> Gespeichert: <a href="#" data-song="${esc(res.id)}">${esc(res.title)}</a>` +
