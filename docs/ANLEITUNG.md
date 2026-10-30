@@ -88,6 +88,24 @@ Folien verteilt wird:
 - **Absatz:** Jeder Absatz der Lieddatei wird genau eine Folie. Passt der Text nicht in die Textbox,
   verkleinert ProPresenter die Schrift automatisch.
 
+## Duplikate in ProPresenter finden
+
+**ProPresenter → Duplikate** zeigt Lieder, die in der ProPresenter-Lieder-Bibliothek mehrfach vorhanden sind:
+gleicher Name (auch „Lied (2)“, „Lied - Kopie“, „Lied copy“) oder gleicher Liedtext unter anderem Namen. Mit
+„Alle Bibliotheken durchsuchen“ werden alle Bibliotheken einbezogen.
+
+Je Gruppe schlägt SongBridge eine Datei zum Behalten vor (grün „behalten“). Jede andere Datei wird Zeile für Zeile
+damit verglichen: rot = steht nur in der behaltenen Datei, grün = steht nur in dieser Datei; „gleicher Text“
+heißt, der Liedtext ist identisch. „Alle Duplikate auswählen“ hakt alle Dateien außer den vorgeschlagenen an,
+„… löschen“ muss zweimal geklickt werden. Gelöschte Dateien werden nicht endgültig entfernt, sondern nach
+`backup/geloescht/` im Datenordner verschoben.
+
+## Textformatierung
+
+Unter **ProPresenter → Export & Formatierung** gibt es neben Schrift, Größe und Farbe auch **Kontur** (an/aus,
+Stärke, Farbe), **Schatten** (Farbe, Unschärfe, Abstand, Deckkraft) und **Abstände** (Zeichen- und Zeilenabstand).
+Die Vorschau zeigt das sofort; vorhandene Präsentationen ändern sich erst nach erneutem Export (der Abgleich vergleicht nur den Text, nicht die Formatierung).
+
 ## PowerPoint-Dateien im Ablaufplan
 
 Präsentationen (.pptx/.ppt), die in ChurchTools am Termin hängen, werden für die Playlist in Bilder

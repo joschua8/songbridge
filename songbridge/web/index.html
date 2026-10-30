@@ -267,6 +267,19 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
 .rows .sub { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .rows .diff { margin-top: 6px; font-size: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rows .diff div { background: var(--code); border-radius: 6px; padding: 6px 8px; }
+.dupe-group { border-bottom: 1px solid var(--line); padding: 12px 14px; }
+.dupe-group:last-child { border-bottom: 0; }
+.dupe-group h4 { margin: 0 0 8px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dupe-file { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: start; padding: 6px 0; }
+.dupe-file + .dupe-file { border-top: 1px dashed var(--line); }
+.dupe-file .ttl { font-weight: 500; overflow-wrap: anywhere; }
+.dupe-file .sub { font-size: 12px; color: var(--muted); }
+.ldiff { margin-top: 6px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); border-radius: 6px; padding: 6px 8px; max-height: 260px; overflow-y: auto; }
+.ldiff div { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 4px; border-radius: 3px; }
+.ldiff .add { background: var(--ok-soft); color: var(--ok); }
+.ldiff .del { background: var(--danger-soft); color: var(--danger); text-decoration: line-through; }
+.ldiff .same { color: var(--muted); }
+.ldiff .gap { color: var(--muted); font-style: italic; }
 .rows .diff b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 2px; }
 .rows .empty-row { display: block; color: var(--muted); padding: 24px 14px; text-align: center; }
 .scroll { max-height: calc(100vh - var(--chrome) - 210px); min-height: 240px; overflow-y: auto; }
@@ -585,6 +598,38 @@ Refrain</pre>
       ProPresenter übernimmt neue Dateien in der Regel sofort; sonst ProPresenter neu starten.</p>
   </section>
 
+  <!-- ======================= ProPresenter: Duplikate ======================= -->
+  <section class="tab" id="tab-dupes" hidden>
+    <div class="page-head">
+      <div><h2>Doppelte Präsentationen</h2>
+        <p id="du-dir">Findet Lieder, die in ProPresenter mehrfach vorhanden sind – gleicher Name (auch „Lied (2)“, „Lied - Kopie“) oder gleicher Liedtext.</p></div>
+      <div class="btn-row">
+        <label class="check" style="margin:0;font-size:13px"><input type="checkbox" id="du-all"> Alle Bibliotheken durchsuchen</label>
+        <button class="btn primary" id="du-check">Neu suchen</button>
+      </div>
+    </div>
+    <div id="du-msg"></div>
+    <div class="stats" id="du-stats"></div>
+    <div class="panel">
+      <div class="toolbar">
+        <input type="search" id="du-q" placeholder="Lieder filtern …" autocomplete="off">
+        <span class="spacer"></span>
+        <label class="check" style="margin:0;font-size:13px"><input type="checkbox" id="du-same"> Nur Text-Unterschiede zeigen</label>
+        <button class="btn small" id="du-sel-all">Alle Duplikate auswählen</button>
+        <button class="btn small" id="du-sel-none">Auswahl aufheben</button>
+      </div>
+      <div class="scroll"><div id="du-groups"><p class="empty-row muted" style="padding:24px;text-align:center">Wird gesucht …</p></div></div>
+      <div class="actionbar">
+        <button class="btn danger" id="du-delete" disabled>Ausgewählte löschen</button>
+        <span class="muted" id="du-info" style="font-size:13px"></span>
+      </div>
+    </div>
+    <div id="du-result" style="margin-top:12px"></div>
+    <p class="muted" style="font-size:12px">„Alle Duplikate auswählen“ wählt in jeder Gruppe alle Dateien außer der vorgeschlagenen (grün, „behalten“).
+      Gelöschte Dateien werden nicht endgültig entfernt, sondern nach <code>backup/geloescht/</code> verschoben.
+      Rot = steht nur in der behaltenen Datei, grün = steht nur in dieser Datei. ProPresenter übernimmt die Änderung in der Regel sofort; sonst neu starten.</p>
+  </section>
+
   <!-- ======================= Einstellungen ======================= -->
   <section class="tab" id="tab-settings" hidden>
     <div class="page-head"><div><h2>Einstellungen</h2><p>Anmeldung bei ChurchTools und Ordner der ProPresenter-Bibliothek.</p></div></div>
@@ -665,7 +710,7 @@ async function api(path, opts = {}) {
 const AREAS = {
   lieder: {views: [["songs", "Bibliothek"], ["upload", "Hochladen"], ["freetext", "Freitext"]]},
   ct: {views: [["plan", "Ablaufpläne"], ["import", "Lieder-Import"]]},
-  pp: {views: [["ppdiff", "Abgleich"], ["export", "Export & Formatierung"]]},
+  pp: {views: [["ppdiff", "Abgleich"], ["dupes", "Duplikate"], ["export", "Export & Formatierung"]]},
   settings: {views: [["settings", "Einstellungen"]]},
 };
 const areaOf = view => Object.keys(AREAS).find(a => AREAS[a].views.some(([v]) => v === view)) || "lieder";
@@ -687,6 +732,7 @@ function showTab(name) {
   if (name === "plan") openPlanTab();
   if (name === "import") openImportTab();
   if (name === "ppdiff") openDiffTab();
+  if (name === "dupes") openDupesTab();
   if (name === "settings") openSettingsTab();
 }
 function openView(name) {
@@ -1166,8 +1212,23 @@ const STYLE_FORM = [
     ["box_color", "Füllfarbe", "color"],
     ["box_opacity", "Deckkraft (0–1)", "number", {min: 0, max: 1, step: 0.05}],
   ]],
-  ["Effekte", [
+  ["Kontur", [
+    ["outline", "Kontur um die Schrift", "check"],
+    ["outline_width", "Stärke (pt)", "number", {min: 0.5, max: 20, step: 0.5}],
+    ["outline_color", "Farbe", "color"],
+  ]],
+  ["Schatten", [
     ["shadow", "Textschatten", "check"],
+    ["shadow_color", "Farbe", "color"],
+    ["shadow_blur", "Unschärfe (pt)", "number", {min: 0, max: 50, step: 1}],
+    ["shadow_distance", "Abstand (pt)", "number", {min: 0, max: 100, step: 1}],
+    ["shadow_opacity", "Deckkraft (0–1)", "number", {min: 0, max: 1, step: 0.05}],
+  ]],
+  ["Abstände", [
+    ["letter_spacing", "Zeichenabstand (pt)", "number", {min: -10, max: 50, step: 0.5}],
+    ["line_spacing", "Zeilenabstand (×)", "number", {min: 0.5, max: 3, step: 0.05}],
+  ]],
+  ["Effekte", [
     ["shrink_to_fit", "Zu langen Text verkleinern", "check"],
   ]],
 ];
@@ -1229,6 +1290,14 @@ function fillStyleForm() {
     const v = getPath(style, el.dataset.k);
     if (el.type === "checkbox") el.checked = v; else el.value = v;
   });
+  // Unteroptionen von Kontur/Schatten nur aktiv, wenn eingeschaltet
+  [["outline", ["outline_width", "outline_color"]], ["shadow", ["shadow_color", "shadow_blur", "shadow_distance", "shadow_opacity"]]]
+    .forEach(([on, keys]) => keys.forEach(k => {
+      const el = $(`#st-form [data-k="${k}"]`);
+      if (!el) return;
+      el.disabled = !style[on];
+      el.closest(".st-row").style.opacity = style[on] ? "" : .5;
+    }));
   // Umbruch nach Absatz: Zeilenzahl spielt keine Rolle, Verkleinern ist immer an.
   const para = style.slide_break === "paragraph";
   ["lines_per_slide", "smart_breaks", "pairs_per_slide", "shrink_to_fit"].forEach(k => {
@@ -1318,9 +1387,19 @@ function hexA(hex, a) {
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
 }
 function paraStyle(ts) {
+  const st = style || {};
+  // Kontur: CSS zeichnet die Linie mittig auf den Rand -> doppelte Breite, Füllung darüber (paint-order).
+  const stroke = st.outline ? `-webkit-text-stroke:calc(${st.outline_width * 2}px * var(--k,1)) ${st.outline_color};paint-order:stroke fill;` : "";
   return `font-family:${fontCss(ts.font)};font-size:calc(${ts.size}px * var(--k,1));color:${ts.color};` +
     `font-weight:${ts.bold ? 700 : 400};font-style:${ts.italic ? "italic" : "normal"};` +
-    (ts.uppercase ? "text-transform:uppercase;" : "");
+    `letter-spacing:calc(${st.letter_spacing || 0}px * var(--k,1));line-height:${1.2 * (st.line_spacing || 1)};` +
+    stroke + (ts.uppercase ? "text-transform:uppercase;" : "");
+}
+
+function shadowCss(st) {
+  if (!st.shadow) return "";
+  const d = st.shadow_distance / Math.SQRT2;  // 315° = nach rechts unten
+  return `text-shadow:${d.toFixed(1)}px ${d.toFixed(1)}px ${st.shadow_blur}px ${hexA(st.shadow_color, st.shadow_opacity)};`;
 }
 
 const boxGeom = st => `left:${st.margin_left}px;top:${st.margin_top}px;` +
@@ -1343,7 +1422,7 @@ function slideHtml(paras, st, isTitle = false) {
   const j = {top: "flex-start", middle: "center", bottom: "flex-end"}[st.valign];
   const box = boxGeom(st) + `justify-content:${j};text-align:${st.align};` +
     (st.box_fill ? `background:${hexA(st.box_color, st.box_opacity)};` : "") +
-    (st.shadow ? "text-shadow:4px 4px 0 #000;" : "");
+    shadowCss(st);
   const body = paras.map(p => paraHtml(p, st)).join("");
   return `<div class="stage"${isTitle ? " data-title" : ""} style="background:${st.background}"><div class="box" style="${box}"><div class="content">${body}</div></div>` +
     `<div class="frame" style="${boxGeom(st)}${isTitle && st.title_center ? "display:none;" : ""}" title="Ziehen zum Verschieben, Ecken/Kanten zum Ändern der Größe (Umschalt: ohne Einrasten)">` +
@@ -1755,7 +1834,7 @@ async function savePlSettings(rematch) {
   try {
     applyLibrary(await api("/api/playlist/settings", {method: "PUT", body: plSettings}));
     $("#pl-saved").textContent = "gespeichert";
-    diffStale = true;
+    diffStale = true; duStale = true;
     if (rematch && evSel && ctState.loggedIn) await loadPlan(evSel); else renderPlan();
     return true;
   } catch (err) {
@@ -1994,7 +2073,7 @@ async function poll() {
         renderSummary(st.summary);
         if (st.summary) {
           loadSongs();
-          diffStale = true;
+          diffStale = true; duStale = true;
           if (syncPlan) {  // Stand hat sich geändert -> Liste ausblenden, neu prüfen lassen
             syncPlan = null; syncSel.clear(); syncDel.clear();
             $("#i-stats").innerHTML = "";
@@ -2125,6 +2204,7 @@ async function writeToPP(overwrite) {
     $("#d-result").innerHTML = `<div class="notice ${res.failed.length ? "warn" : "ok"}">${res.written.length} Datei(en) in <code>${esc(res.dir)}</code> geschrieben.
       ${res.backup ? `Alte Fassungen gesichert in <code>${esc(res.backup)}</code>.` : ""}
       ${res.failed.length ? `<ul style="margin:6px 0 0;padding-left:18px">${res.failed.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}</div>`;
+    duStale = true;
     await loadDiff();
     applyLibrary(await api("/api/playlist/library"));
   } catch (err) {
@@ -2156,6 +2236,122 @@ $("#d-zip").onclick = async () => {
     $("#d-result").innerHTML = `<div class="notice ok">${esc(a.download)} heruntergeladen.</div>`;
   } catch (err) {
     $("#d-result").innerHTML = `<div class="notice error">${esc(err.message)}</div>`;
+  }
+};
+
+/* ---------------- ProPresenter: Duplikate ---------------- */
+let dupes = null, duSel = new Set(), duStale = true;
+
+async function openDupesTab() { if (duStale) await loadDupes(); }
+
+async function loadDupes() {
+  duStale = false;
+  $("#du-msg").innerHTML = ""; $("#du-result").innerHTML = "";
+  $("#du-groups").innerHTML = '<p class="muted" style="padding:24px;text-align:center">Wird gesucht …</p>';
+  try {
+    dupes = await api("/api/pp/duplicates" + ($("#du-all").checked ? "?all=1" : ""));
+    const paths = new Set(dupes.groups.flatMap(g => g.files.map(f => f.path)));
+    duSel = new Set([...duSel].filter(p => paths.has(p)));
+    $("#du-dir").innerHTML = "Durchsucht: " + dupes.dirs.map(d => `<code title="${esc(d.path)}">${esc(d.library)}</code>`).join(", ") +
+      ' · <a href="#" data-goto="settings">Bibliothek ändern</a>';
+    renderDupes();
+  } catch (err) {
+    dupes = null;
+    $("#du-stats").innerHTML = ""; $("#du-groups").innerHTML = "";
+    $("#du-msg").innerHTML = `<div class="notice ${/Einstellungen/.test(err.message) ? "warn" : "error"}">${esc(err.message)}
+      ${/Einstellungen/.test(err.message) ? ' <a href="#" data-goto="settings">Zu den Einstellungen</a>' : ""}</div>`;
+    renderDupeButtons();
+  }
+}
+
+function dupeGroups() {
+  if (!dupes) return [];
+  const q = $("#du-q").value.trim().toLowerCase();
+  return dupes.groups.filter(g => (!q || (g.title + " " + g.files.map(f => f.file).join(" ")).toLowerCase().includes(q))
+    && (!$("#du-same").checked || !g.identical));
+}
+
+function diffHtml(diff) {
+  // gleiche Zeilen nur als Kontext rund um Änderungen zeigen
+  const show = diff.map((d, i) => d.t !== "same" || diff.slice(Math.max(0, i - 2), i + 3).some(x => x.t !== "same"));
+  let out = "", skipped = 0;
+  diff.forEach((d, i) => {
+    if (!show[i]) { skipped++; return; }
+    if (skipped) { out += `<div class="gap">… ${skipped} gleiche Zeile(n) …</div>`; skipped = 0; }
+    out += `<div class="${d.t}">${d.t === "add" ? "+ " : d.t === "del" ? "− " : "  "}${esc(d.text)}</div>`;
+  });
+  if (skipped) out += `<div class="gap">… ${skipped} gleiche Zeile(n) …</div>`;
+  return out;
+}
+
+function renderDupes() {
+  if (!dupes) return;
+  const all = dupes.groups, extra = all.reduce((n, g) => n + g.files.length - 1, 0);
+  const differ = all.filter(g => !g.identical).length;
+  $("#du-stats").innerHTML = `<div class="stat info"><b>${all.length}</b><span>Lieder mehrfach</span></div>
+    <div class="stat warn"><b>${extra}</b><span>überzählige Dateien</span></div>
+    <div class="stat ok"><b>${all.length - differ}</b><span>Gruppen mit gleichem Text</span></div>
+    <div class="stat danger"><b>${differ}</b><span>Gruppen mit Text-Unterschieden</span></div>`;
+  const fmt = t => new Date(t * 1000).toLocaleString("de-DE", {dateStyle: "short", timeStyle: "short"});
+  const groups = dupeGroups();
+  $("#du-groups").innerHTML = groups.map(g => `<div class="dupe-group">
+      <h4>${esc(g.title)} <span class="badge">${g.files.length} Dateien</span>
+        ${g.identical ? '<span class="badge covered">gleicher Text</span>' : '<span class="badge danger">Text unterschiedlich</span>'}</h4>
+      ${g.files.map(f => `<div class="dupe-file">
+        <span><input type="checkbox" data-path="${esc(f.path)}" ${duSel.has(f.path) ? "checked" : ""}></span>
+        <div style="min-width:0"><div class="ttl">${esc(f.file)}</div>
+          <div class="sub">${esc(f.library)} · geändert ${esc(fmt(f.modified))} · ${f.lines} Textzeilen · ${Math.max(1, Math.round(f.size / 1024))} KB
+            ${f.error ? ` · <span style="color:var(--danger)">${esc(f.error)}</span>` : ""}</div>
+          ${f.diff && f.diff.length ? `<div class="ldiff">${diffHtml(f.diff)}</div>` : ""}</div>
+        <div>${f.keep ? '<span class="badge covered" title="Vorschlag: diese Datei behalten">behalten</span>'
+          : f.identical ? '<span class="badge">gleicher Text</span>' : '<span class="badge danger">Text abweichend</span>'}</div>
+      </div>`).join("")}</div>`).join("")
+    || `<p class="muted" style="padding:24px;text-align:center">${all.length ? "Keine Treffer für den Filter." : "Keine Duplikate gefunden. 🎉"}</p>`;
+  renderDupeButtons();
+}
+
+function renderDupeButtons() {
+  const n = duSel.size;
+  $("#du-delete").disabled = !n;
+  $("#du-delete").classList.remove("armed");
+  $("#du-delete").textContent = n ? `${n} ${n === 1 ? "Datei" : "Dateien"} löschen` : "Ausgewählte löschen";
+  $("#du-info").textContent = n ? `${n} ausgewählt` : "";
+}
+
+$("#du-check").onclick = loadDupes;
+$("#du-all").onchange = loadDupes;
+$("#du-q").oninput = renderDupes;
+$("#du-same").onchange = renderDupes;
+$("#du-groups").onchange = e => {
+  const cb = e.target.closest("input[data-path]"); if (!cb) return;
+  cb.checked ? duSel.add(cb.dataset.path) : duSel.delete(cb.dataset.path);
+  renderDupeButtons();
+};
+$("#du-sel-all").onclick = () => { dupeGroups().forEach(g => g.files.forEach(f => { if (!f.keep) duSel.add(f.path); })); renderDupes(); };
+$("#du-sel-none").onclick = () => { duSel.clear(); renderDupes(); };
+$("#du-delete").onclick = async () => {
+  const b = $("#du-delete");
+  if (!b.classList.contains("armed")) {
+    const keepers = dupes ? dupes.groups.filter(g => g.files.every(f => duSel.has(f.path))).length : 0;
+    b.classList.add("armed");
+    b.textContent = keepers ? `Achtung: ${keepers} Lied(er) ganz löschen? Nochmal klicken` : `Wirklich ${duSel.size} löschen? Nochmal klicken`;
+    setTimeout(() => { if (b.classList.contains("armed")) renderDupeButtons(); }, 5000);
+    return;
+  }
+  b.disabled = true;
+  try {
+    const res = await api("/api/pp/duplicates/delete", {method: "POST", body: {paths: [...duSel]}});
+    duSel.clear();
+    $("#du-result").innerHTML = `<div class="notice ${res.failed.length ? "warn" : "ok"}">${res.moved.length} Datei(en) gelöscht
+      (gesichert in <code>${esc(res.backup)}</code>).
+      ${res.failed.length ? `<ul style="margin:6px 0 0;padding-left:18px">${res.failed.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}</div>`;
+    diffStale = true; duStale = true;
+    const msg = $("#du-result").innerHTML;
+    await loadDupes();
+    $("#du-result").innerHTML = msg;
+  } catch (err) {
+    $("#du-result").innerHTML = `<div class="notice error">${esc(err.message)}</div>`;
+    renderDupeButtons();
   }
 };
 

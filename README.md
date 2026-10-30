@@ -26,6 +26,8 @@ ProPresenter presentations and turns a service plan into a ready-to-use ProPrese
 | **Editing** | Edit any song (including ChurchTools songs) as free text; the import never overwrites edited songs and the original can be restored. |
 | **Export to ProPresenter** | `.sng` → `.pro` with configurable formatting (font, size, colours, slide breaks by line count (preferring sentence ends) or by paragraph with automatic font scaling, text box positioned with the mouse), slide preview and hot keys per song part (verse 1 = A, chorus = C, bridge = B …). |
 | **Library sync** | Compares the song database with your ProPresenter song library: what is missing, what has different lyrics – and updates it on request (with backup). |
+| **Duplicates** | Finds presentations that exist more than once in ProPresenter (same name incl. "Song (2)"/"Song - Kopie", or same lyrics), shows a line-by-line diff against the suggested keeper and deletes the selected copies (moved to a backup folder, "select all duplicates" included). |
+| **Text formatting** | Font, size, colour, bold/italic/uppercase, outline (stroke), shadow (colour, blur, distance, opacity), letter and line spacing – with live preview. |
 | **Self-updating** | The app checks GitHub Releases on start-up and updates itself. |
 
 ## Installation
