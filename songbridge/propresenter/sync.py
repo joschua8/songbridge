@@ -306,12 +306,71 @@ def base_title(stem: str) -> str:
         name = shorter
 
 
+_FS_RE = re.compile(r"\\fs(\d+)")
+_FONT_RE = re.compile(r"\\f\d+\\f[a-z]+\\fcharset\d+ ([^;]+);")
+_COLOR_RE = re.compile(r"\\red(\d+)\\green(\d+)\\blue(\d+);")
+_STROKE_RE = re.compile(r"\\strokewidth(-?\d+)")
+
+
+def pro_structure(path: Path) -> dict:
+    """Aufbau einer Präsentation für den Vergleich: Gruppen mit Folien und Zeilen, Arrangement, Formatierung."""
+    pres = presentation_pb2.Presentation()
+    pres.ParseFromString(path.read_bytes())
+    cues = {c.uuid.string: c for c in pres.cues}
+    fonts, sizes, colors, strokes = set(), set(), set(), set()
+    groups = []
+    for cg in pres.cue_groups:
+        slides = []
+        for cid in cg.cue_identifiers:
+            cue = cues.get(cid.string)
+            lines: list[str] = []
+            for action in (cue.actions if cue else []):
+                if not action.HasField("slide"):
+                    continue
+                for el in action.slide.presentation.base_slide.elements:
+                    rtf = el.element.text.rtf_data.decode("latin-1", errors="replace")
+                    if not rtf:
+                        continue
+                    text = rtf_to_text(rtf)
+                    lines.extend(nfc(ln).replace("\u00a0", " ").strip() for ln in text.split("\n") if ln.strip())
+                    if lines:  # Formatierung nur von Elementen mit Text
+                        fonts.update(f for f in _FONT_RE.findall(rtf) if f != "Helvetica")
+                        sizes.update(int(v) / 2 for v in _FS_RE.findall(rtf) if v != "24")
+                        colors.update("#%02x%02x%02x" % tuple(int(x) for x in c) for c in _COLOR_RE.findall(rtf))
+                        strokes.update(int(v) for v in _STROKE_RE.findall(rtf) if v != "0")
+            slides.append(lines)
+        groups.append({"name": cg.group.name, "slides": slides})
+    by_id = {cg.group.uuid.string: cg.group.name for cg in pres.cue_groups}
+    arr = next((a for a in pres.arrangements if a.uuid.string == pres.selected_arrangement.string), None)
+    arrangement = [by_id.get(g.string, "?") for g in arr.group_identifiers] if arr else []
+    fmt = {"Schriften": sorted(fonts), "Größen": [f"{v:g} pt" for v in sorted(sizes)],
+           "Farben": sorted(colors), "Kontur": "ja" if strokes else "nein"}
+    return {"groups": groups, "arrangement": arrangement, "format": fmt,
+            "slides": sum(len(g["slides"]) for g in groups)}
+
+
+def _rows(structure: dict) -> list[dict]:
+    """Anzeigezeilen: Gruppenname, Folientrenner, Textzeilen (für die Links/Rechts-Ansicht)."""
+    rows = []
+    for g in structure["groups"]:
+        rows.append({"k": "group", "text": g["name"]})
+        for n, slide in enumerate(g["slides"]):
+            if n:
+                rows.append({"k": "slide", "text": ""})
+            rows.extend({"k": "line", "text": ln} for ln in slide)
+    return rows
+
+
 @dataclass
 class DupFile:
     path: Path
     library: str
-    lines: list[str] = field(default_factory=list)
+    structure: dict = field(default_factory=dict)
     error: str = ""
+
+    @property
+    def lines(self) -> list[str]:
+        return [ln for g in self.structure.get("groups", []) for sl in g["slides"] for ln in sl]
 
     @property
     def is_copy(self) -> bool:
@@ -322,17 +381,22 @@ class DupFile:
         return norm if len(norm) >= MIN_CONTENT_LINES else None
 
 
-def _line_diff(keep: list[str], other: list[str]) -> list[dict]:
-    """Zeilenvergleich (Groß/klein, Satzzeichen egal): same / del (nur im behaltenen) / add (nur in diesem)."""
+def side_by_side(left: list[dict], right: list[dict]) -> list[dict]:
+    """Zeilen beider Dateien nebeneinander (wie ein Git-Diff), exakter Vergleich.
+
+    -> [{op: same|change|del|add, l: Zeile|None, r: Zeile|None}]; del = nur links, add = nur rechts.
+    """
     import difflib
-    a, b = [norm_line(x) for x in keep], [norm_line(x) for x in other]
+    from itertools import zip_longest
+    key = lambda r: (r["k"], r["text"])
     out = []
-    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+    sm = difflib.SequenceMatcher(None, [key(r) for r in left], [key(r) for r in right], autojunk=False)
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
         if op == "equal":
-            out.extend({"t": "same", "text": x} for x in other[j1:j2])
-            continue
-        out.extend({"t": "del", "text": x} for x in keep[i1:i2])
-        out.extend({"t": "add", "text": x} for x in other[j1:j2])
+            out.extend({"op": "same", "l": l, "r": r} for l, r in zip(left[i1:i2], right[j1:j2]))
+        else:
+            for l, r in zip_longest(left[i1:i2], right[j1:j2]):
+                out.append({"op": "change" if l and r else ("del" if l else "add"), "l": l, "r": r})
     return out
 
 
@@ -348,7 +412,7 @@ def find_duplicates(dirs: list[tuple[str, Path]], preferred: str = "") -> list[d
         for f in pp_files(folder):
             d = DupFile(f, library)
             try:
-                _, d.lines, _ = pro_lines(f)
+                d.structure = pro_structure(f)
             except Exception as exc:  # defekte Datei trotzdem anzeigen (Name kann doppelt sein)
                 d.error = f"nicht lesbar: {exc}"
             files.append(d)
@@ -386,20 +450,31 @@ def find_duplicates(dirs: list[tuple[str, Path]], preferred: str = "") -> list[d
         members.sort(key=lambda d: (d.is_copy, d.library != preferred, -len(d.lines), -d.path.stat().st_mtime))
         keep = members[0]
         rows = []
+        keep_rows = _rows(keep.structure) if keep.structure else []
         for d in members:
             st = d.path.stat()
             row = {
                 "path": str(d.path), "file": nfc(d.path.name), "library": d.library, "size": st.st_size,
-                "modified": st.st_mtime, "lines": len(d.lines), "keep": d is keep, "error": d.error,
+                "modified": st.st_mtime, "lines": len(d.lines), "slides": d.structure.get("slides", 0),
+                "arrangement": d.structure.get("arrangement", []), "format": d.structure.get("format", {}),
+                "keep": d is keep, "error": d.error,
             }
             if d is not keep:
-                diff = _line_diff(keep.lines, d.lines)
-                row["identical"] = not d.error and not keep.error and all(x["t"] == "same" for x in diff)
-                row["diff"] = [] if row["identical"] else diff[:400]
+                rows_d = _rows(d.structure) if d.structure else []
+                pairs = side_by_side(keep_rows, rows_d)
+                text_same = not d.error and not keep.error and all(p["op"] == "same" for p in pairs)
+                layout_same = (d.structure.get("format") == keep.structure.get("format")
+                               and d.structure.get("arrangement") == keep.structure.get("arrangement"))
+                # identical: Text, Folienaufteilung, Arrangement und Formatierung gleich
+                row["status"] = ("identical" if text_same and layout_same
+                                 else "layout" if text_same else "text")
+                row["pairs"] = pairs[:600]
+                row["changes"] = sum(p["op"] != "same" for p in pairs)
             rows.append(row)
         title = base_title(keep.path.stem)
+        status = {r.get("status") for r in rows if not r["keep"]}
         out.append({"title": title, "files": rows,
-                    "identical": all(r.get("identical", True) for r in rows)})
+                    "status": "text" if "text" in status else "layout" if "layout" in status else "identical"})
     out.sort(key=lambda g: g["title"].casefold())
     return out
 

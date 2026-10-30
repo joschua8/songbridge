@@ -94,11 +94,17 @@ Folien verteilt wird:
 gleicher Name (auch „Lied (2)“, „Lied - Kopie“, „Lied copy“) oder gleicher Liedtext unter anderem Namen. Mit
 „Alle Bibliotheken durchsuchen“ werden alle Bibliotheken einbezogen.
 
-Je Gruppe schlägt SongBridge eine Datei zum Behalten vor (grün „behalten“). Jede andere Datei wird Zeile für Zeile
-damit verglichen: rot = steht nur in der behaltenen Datei, grün = steht nur in dieser Datei; „gleicher Text“
-heißt, der Liedtext ist identisch. „Alle Duplikate auswählen“ hakt alle Dateien außer den vorgeschlagenen an,
-„… löschen“ muss zweimal geklickt werden. Gelöschte Dateien werden nicht endgültig entfernt, sondern nach
-`backup/geloescht/` im Datenordner verschoben.
+Je Gruppe schlägt SongBridge eine Datei zum Behalten vor (grün „behalten“). Jede andere Datei wird **nebeneinander**
+damit verglichen, wie bei Git: links die Datei zum Behalten, rechts die Kopie. Verglichen wird Zeichen für Zeichen
+(auch Satzzeichen), dazu Folienaufteilung, Arrangement und Formatierung (Schriften, Größen, Farben, Kontur).
+Rot = nur links, grün = nur rechts, gelb = geändert (geänderte Wörter markiert). Jede Kopie ist markiert als
+**identisch** (gar kein Unterschied), **nur Formatierung/Aufbau anders** oder **Text anders**.
+„Gleiche Zeilen einklappen“ blendet unveränderte Zeilen aus.
+
+„Identische auswählen“ hakt nur Kopien ohne jeden Unterschied an, „Alle Duplikate auswählen“ alle Dateien außer den
+vorgeschlagenen; „… löschen“ muss zweimal geklickt werden. Gelöschte Präsentationen werden sofort aus dem Ordner der
+ProPresenter-Bibliothek entfernt; eine Sicherheitskopie bleibt in `backup/geloescht/` im Datenordner. Zeigt
+ProPresenter ein gelöschtes Lied noch an, ProPresenter einmal neu starten.
 
 ## Textformatierung
 
