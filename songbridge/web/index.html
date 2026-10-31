@@ -492,6 +492,7 @@ Refrain</pre>
           <fieldset style="margin-top:8px"><legend>Automatisch einfügen</legend>
             <label class="check" style="margin-bottom:6px;font-size:13px"><input type="checkbox" data-pl="add_lords_prayer"> Vaterunser unter „Vaterunser“</label>
             <label class="check" style="margin-bottom:6px;font-size:13px"><input type="checkbox" data-pl="add_silence"> Stille-Bild unter „Stille“</label>
+            <label class="check" style="margin-bottom:6px;font-size:13px" title="Sonst erscheinen PDFs nur als Zeile zum Anhaken"><input type="checkbox" data-pl="convert_pdfs"> PDFs am Termin automatisch umwandeln</label>
           </fieldset>
           <label class="check" style="margin-top:10px;font-size:13px" title="Unter Windows nötig, damit ProPresenter die Lieder anzeigt (fragt dann, ob vorhandene ersetzt werden sollen). Unter macOS aus lassen, sonst entstehen Duplikate."><input type="checkbox" data-pl="embed_songs"> Lieder in die Playlist-Datei packen</label>
         </div>
@@ -1723,6 +1724,7 @@ $("#ev-reload").onclick = loadEvents;
 function defaultInclude(row) {
   if (row.auto === "vaterunser") return !!plSettings.add_lords_prayer;
   if (row.auto === "stille") return !!plSettings.add_silence && !row.error;
+  if (row.auto === "pdf") return !!plSettings.convert_pdfs;
   if (row.type === "media") return !row.error;
   if (row.before && !plSettings.include_before) return false;
   if (row.type === "normal") return !!plSettings.include_items;
@@ -1781,6 +1783,7 @@ function renderPlan() {
       const md = r.media || {};
       const what = md.source === "silence" ? `ein zufälliges von ${md.count || 0} ${md.count === 1 ? "Bild" : "Bildern"} aus dem Stille-Ordner`
         : md.kind === "slides" ? "Präsentation → Bilder"
+        : md.kind === "pdf" ? (r.include ? "PDF → eine Folie je Seite" : "PDF – zum Umwandeln anhaken (sonst nur als Hinweis am Ende)")
         : {image: "Bild", video: "Video", audio: "Audio"}[md.kind] || "Datei";
       body = `<div class="ttl"><span>${md.source === "silence" ? "◐" : "📎"} ${esc(r.title)}</span>${auto}</div>
         <div class="sub">${esc(what)}${md.source === "ct" ? " · aus ChurchTools" : ""}</div>
@@ -1896,7 +1899,7 @@ document.querySelectorAll("[data-pl]").forEach(el => el.onchange = () => {
   plSettings[key] = el.type === "checkbox" ? el.checked : el.value;
   if (plan && (key === "include_items" || key === "include_before"))
     plan.rows.forEach(r => { if (!r.touched) r.include = defaultInclude(r); });
-  const auto = {add_lords_prayer: "vaterunser", add_silence: "stille"}[key];
+  const auto = {add_lords_prayer: "vaterunser", add_silence: "stille", convert_pdfs: "pdf"}[key];
   if (plan && auto) plan.rows.forEach(r => { if (r.auto === auto) { r.include = defaultInclude(r); r.touched = false; } });
   savePlSettings(key === "fuzzy");
 });

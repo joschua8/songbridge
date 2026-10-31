@@ -773,9 +773,10 @@ def _media_files(row: dict, settings: playlist.PlaylistSettings, tmp: Path) -> l
         url, filename = client.file_meta(str(media.get("fileId")), str(media.get("name") or ""))
     except (dl.ChurchToolsError, requests.RequestException) as exc:
         raise RuntimeError(f"Datei nicht abrufbar ({exc})") from exc
-    # Typ erst am echten Dateinamen prüfen, dann laden – .docx, .pdf & Co. werden gar nicht heruntergeladen.
+    # Typ erst am echten Dateinamen prüfen, dann laden – .docx & Co. werden gar nicht heruntergeladen;
+    # PDFs nur, wenn sie im Ablaufplan angehakt sind (dann Seiten -> Folienbilder).
     name = Path(filename or str(media.get("name") or "Datei")).name
-    kind = playlist.media_kind(name)
+    kind = playlist.media_kind(name) or ("slides" if Path(name).suffix.lower() == ".pdf" else "")
     if not kind:
         raise RuntimeError(f"{Path(name).suffix or 'Dateityp'} wird nicht übernommen")
     target = tmp / str(media.get("fileId")) / name

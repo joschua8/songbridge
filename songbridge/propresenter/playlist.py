@@ -87,6 +87,7 @@ class PlaylistSettings:
     fuzzy: bool = True                   # ähnliche Namen automatisch zuordnen
     add_lords_prayer: bool = True        # Vaterunser unter dem Ablaufpunkt „Vaterunser“ einfügen
     add_silence: bool = True             # Stille-Bilder unter dem Ablaufpunkt „Stille“ einfügen
+    convert_pdfs: bool = False           # PDFs am Termin standardmäßig in Folienbilder umwandeln (sonst nur Hinweis)
     silence_dir: str = ""                # Ordner mit den Stille-Bildern (.jpg/.png)
     # Lieder-.pro mit in die Playlist packen, wie ProPresenters eigener Export. Unter Windows nötig
     # (sonst bleiben die Lied-Einträge leer); unter macOS legt ProPresenter damit Duplikate an.
@@ -492,6 +493,11 @@ def add_auto_rows(rows: list[dict], matcher: Matcher, root: Path | None, setting
     skipped: list[str] = []  # .docx, .pdf & Co. kommen nicht in die Playlist, nur als Hinweis-Kopfzeile am Ende
     for f in event_files:
         kind = media_kind(f["name"])
+        if Path(f["name"]).suffix.lower() == ".pdf":
+            # PDFs nur bei Bedarf: eigene Zeile mit Häkchen (Standard aus convert_pdfs); nicht angehakt -> Hinweis am Ende
+            out.append(_auto_row(f"file-{f['id']}", "media", "pdf", f["name"],
+                                 media={"source": "ct", "fileId": f["id"], "name": f["name"], "kind": "pdf"}))
+            continue
         if not kind:
             skipped.append(f["name"])
             continue
@@ -844,7 +850,13 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
     resolve_media(row) -> [Path]: Dateien einer Medien-Zeile (lädt z. B. aus ChurchTools); wirft RuntimeError.
     """
     entries, notes = [], []
+    # Nicht angehakte PDFs werden in der Hinweis-Kopfzeile „Nicht übernommene Dateien“ mit genannt.
+    pdfs_off = [(row.get("title") or "").strip() for row in rows
+                if row.get("type") == "media" and (row.get("media") or {}).get("kind") == "pdf" and not row.get("include", True)]
+    has_skipped_row = any(row.get("auto") == "skipped" for row in rows)
     for row in rows:
+        if row.get("auto") == "skipped" and row.get("include", True) and pdfs_off:
+            row = {**row, "title": f"{(row.get('title') or '').strip()}, {', '.join(pdfs_off)}"}
         if not row.get("include", True):
             continue
         kind = row.get("type")
@@ -877,6 +889,8 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
             if row.get("auto") == "skipped":
                 color = MISSING_COLOR
             entries.append({"kind": "header", "name": title, "color": color})
+    if pdfs_off and not has_skipped_row:
+        entries.append({"kind": "header", "name": "Nicht übernommene Dateien: " + ", ".join(pdfs_off), "color": MISSING_COLOR})
     return entries, notes
 
 
