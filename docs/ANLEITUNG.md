@@ -124,8 +124,12 @@ Die Vorschau zeigt das sofort; vorhandene Präsentationen ändern sich erst nach
 Präsentationen (.pptx/.ppt), die in ChurchTools am Termin hängen, werden für die Playlist in Bilder
 umgewandelt. Dafür braucht es **LibreOffice** (kostenlos, libreoffice.org) oder – nur unter
 Windows – ein installiertes **Microsoft PowerPoint**. Bilder, Videos und Audio gehen ohne.
-Die Dateien stehen ganz oben in der Playlist. Andere Dateien (z. B. .docx oder .pdf) werden gar nicht erst
-heruntergeladen; ihre Namen stehen in einer orangen Kopfzeile am Ende der Playlist, damit nichts übersehen wird.
+Die Dateien stehen ganz oben in der Playlist.
+
+**PDFs** am Termin erscheinen im Ablaufplan als Zeile mit leerem Häkchen. Hakst du sie an, lädt SongBridge das PDF
+beim Export und macht aus jeder Seite eine Folie. Sollen alle PDFs automatisch umgewandelt werden, rechts
+„PDFs am Termin automatisch umwandeln“ einschalten. Nicht angehakte PDFs und andere Dateien (z. B. .docx) werden
+nicht heruntergeladen; ihre Namen stehen in einer orangen Kopfzeile am Ende der Playlist, damit nichts übersehen wird.
 
 Standardmäßig werden aus dem Ablaufplan nur die roten Überschriften als Kopfzeilen übernommen. Normale
 Ablaufpunkte (rosa) kommen mit „Auch normale Ablaufpunkte (rosa) übernehmen“ (rechts) dazu – oder einzeln per
