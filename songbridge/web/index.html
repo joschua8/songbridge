@@ -274,6 +274,13 @@ details.token summary { cursor: pointer; font-size: 13px; color: var(--muted); m
 .dupe-file + .dupe-file { border-top: 1px dashed var(--line); }
 .dupe-file .ttl { font-weight: 500; overflow-wrap: anywhere; }
 .dupe-file .sub { font-size: 12px; color: var(--muted); }
+.mrule { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; gap: 6px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.mrule .mr-match { grid-column: 1 / -1; }
+.mrule input, .mrule select { padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 13px; min-width: 0; }
+.mrule button { border: 1px solid var(--line); background: none; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.macro-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 1px 8px 1px 4px; margin: 4px 4px 0 0; cursor: pointer; }
+.macro-chip.off { opacity: .5; text-decoration: line-through; }
+.plan-list li.macro .ttl span { color: var(--accent); }
 .sbs { margin-top: 8px; width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 13px; }
 .sbs table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .sbs th { background: var(--code); text-align: left; font-weight: 600; padding: 6px 8px; font-size: 12px; overflow-wrap: anywhere; }
@@ -690,6 +697,24 @@ Refrain</pre>
           <ul class="lib-order" id="pl-libs"></ul>
         </fieldset>
         <div id="s-pp-msg"></div>
+      </div>
+
+      <div class="panel card">
+        <h3>Makros</h3>
+        <p class="lead">Makros aus ProPresenter automatisch in die Playlist übernehmen – an Kopfzeilen oder als eigene Folie.</p>
+        <div class="field"><label for="s-macros">ProPresenter-Makrodatei</label>
+          <div class="path-row"><input type="text" id="s-macros" placeholder="automatisch" spellcheck="false">
+            <button class="btn small" id="s-macros-save">Übernehmen</button></div>
+          <div class="muted" id="s-macros-info" style="font-size:12px;margin-top:4px"></div>
+        </div>
+        <fieldset><legend>Regeln</legend>
+          <p class="muted" style="font-size:12px;margin:0 0 6px">Enthält der Titel eines Ablaufpunkts den Text, wird das Makro eingefügt
+            (Groß/klein egal). Im Ablaufplan lässt sich jedes Makro vor dem Export noch abwählen.</p>
+          <div id="s-mrules"></div>
+          <div class="btn-row" style="margin-top:6px"><button class="btn small" id="s-mrule-add">+ Regel</button>
+            <button class="btn small primary" id="s-mrules-save">Regeln speichern</button></div>
+        </fieldset>
+        <div id="s-macros-msg"></div>
       </div>
 
       <div class="panel card">
@@ -1725,6 +1750,9 @@ function defaultInclude(row) {
   if (row.auto === "vaterunser") return !!plSettings.add_lords_prayer;
   if (row.auto === "stille") return !!plSettings.add_silence && !row.error;
   if (row.auto === "pdf") return !!plSettings.convert_pdfs;
+  if (row.type === "macro") return true;
+  // Ablaufpunkt mit Makro an der Kopfzeile: Kopfzeile übernehmen, sonst ginge das Makro verloren
+  if ((row.macros || []).some(m => m.on)) return true;
   if (row.type === "media") return !row.error;
   if (row.before && !plSettings.include_before) return false;
   if (row.type === "normal") return !!plSettings.include_items;
@@ -1779,7 +1807,11 @@ function renderPlan() {
     const sub = [r.before ? "vor Beginn" : "", fmtDur(r.duration), r.responsible].filter(Boolean).map(esc).join(" · ");
     let body;
     const auto = r.auto ? ' <span class="badge info" title="Automatisch eingefügt">auto</span>' : "";
-    if (r.type === "media") {
+    if (r.type === "macro") {
+      const m = r.macro || {};
+      body = `<div class="ttl"><span>⚡ Makro „${esc(m.name || r.title)}“</span>${auto}</div>
+        <div class="sub">eigene Folie ${r.position === "after" ? "nach" : "vor"} „${esc(r.target || "")}“ – löst das Makro aus</div>`;
+    } else if (r.type === "media") {
       const md = r.media || {};
       const what = md.source === "silence" ? `ein zufälliges von ${md.count || 0} ${md.count === 1 ? "Bild" : "Bildern"} aus dem Stille-Ordner`
         : md.kind === "slides" ? "Präsentation → Bilder"
@@ -1808,7 +1840,9 @@ function renderPlan() {
           <button class="btn small" data-none="${i}" title="Lied als fehlend behandeln">keins</button></div>`;
     } else {
       body = `<div class="ttl"><i class="sw" style="background:${color(r)}"></i><span>${esc(r.title) || '<span class="muted">(ohne Titel)</span>'}</span></div>
-        ${sub || r.note ? `<div class="sub">${sub}${sub && r.note ? " · " : ""}${esc(r.note).slice(0, 160)}</div>` : ""}`;
+        ${sub || r.note ? `<div class="sub">${sub}${sub && r.note ? " · " : ""}${esc(r.note).slice(0, 160)}</div>` : ""}
+        ${(r.macros || []).map((m, j) => `<label class="macro-chip${m.on ? "" : " off"}" title="Makro an der Kopfzeile auslösen">
+          <input type="checkbox" data-mac="${i}:${j}" ${m.on ? "checked" : ""}>⚡ ${esc(m.name)}</label>`).join("")}`;
     }
     return `<li class="${r.type}${r.include ? "" : " off"}"><input type="checkbox" data-inc="${i}" ${r.include ? "checked" : ""} title="In die Playlist übernehmen">
       <span class="time">${esc(r.start || "")}</span><div style="min-width:0">${body}</div></li>`;
@@ -1827,7 +1861,12 @@ function renderPlan() {
 $("#plan-list").addEventListener("click", e => {
   const t = e.target, rows = plan && plan.rows;
   if (!rows) return;
-  if (t.dataset.inc !== undefined) {
+  if (t.dataset.mac !== undefined) {
+    const [i, j] = t.dataset.mac.split(":").map(Number);
+    const r = rows[i]; r.macros[j].on = t.checked;
+    if (t.checked && !r.include) { r.include = true; r.touched = true; }  // Makro braucht die Kopfzeile
+    renderPlan();
+  } else if (t.dataset.inc !== undefined) {
     const r = rows[+t.dataset.inc]; r.include = t.checked; r.touched = true; renderPlan();
   } else if (t.dataset.pick !== undefined) {
     const box = $("#pick-" + t.dataset.pick); box.hidden = !box.hidden;
@@ -1846,9 +1885,58 @@ $("#plan-list").addEventListener("change", e => {
   const r = plan.rows[+i]; r.rel = doc.rel; r.manual = true; renderPlan();
 });
 
+/* Makros (Einstellungen) */
+let macroList = [];
+const MACRO_MODES = [["header", "an die Kopfzeile"], ["slide-before", "eigene Folie davor"], ["slide-after", "eigene Folie danach"]];
+function renderMacroRules() {
+  const rules = plSettings.macro_rules || [];
+  const opts = sel => (sel && !macroList.some(m => m.uuid === sel.uuid) ? [{uuid: sel.uuid, name: sel.name + " (nicht gefunden)"}] : [])
+    .concat(macroList).map(m => `<option value="${esc(m.uuid)}" ${sel && sel.uuid === m.uuid ? "selected" : ""}>${esc(m.name)}</option>`).join("");
+  $("#s-mrules").innerHTML = rules.map((r, i) => `<div class="mrule" data-i="${i}">
+      <input type="text" class="mr-match" value="${esc(r.match)}" placeholder="Ablaufpunkt enthält, z. B. Begrüßung">
+      <select class="mr-macro">${opts(r)}</select>
+      <select class="mr-mode">${MACRO_MODES.map(([v, l]) => `<option value="${v}" ${r.mode === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button type="button" class="mr-del" title="Regel entfernen">×</button></div>`).join("")
+    || '<p class="muted" style="font-size:12px;margin:0">Noch keine Regeln.</p>';
+}
+function readMacroRules() {
+  return [...document.querySelectorAll("#s-mrules .mrule")].map(el => {
+    const uuid = el.querySelector(".mr-macro").value;
+    const m = macroList.find(x => x.uuid === uuid) || (plSettings.macro_rules || [])[+el.dataset.i] || {};
+    return {match: el.querySelector(".mr-match").value.trim(), uuid, name: m.name || "", mode: el.querySelector(".mr-mode").value};
+  });
+}
+$("#s-mrule-add").onclick = () => {
+  if (!macroList.length) { $("#s-macros-msg").innerHTML = '<div class="notice warn">Erst die Makrodatei angeben – sonst gibt es keine Makros zur Auswahl.</div>'; return; }
+  plSettings.macro_rules = readMacroRules().concat([{match: "", uuid: macroList[0].uuid, name: macroList[0].name, mode: "header"}]);
+  renderMacroRules();
+  $("#s-mrules .mrule:last-child .mr-match").focus();
+};
+$("#s-mrules").onclick = e => {
+  const b = e.target.closest(".mr-del"); if (!b) return;
+  plSettings.macro_rules = readMacroRules().filter((_, i) => i !== +b.closest(".mrule").dataset.i);
+  renderMacroRules();
+};
+$("#s-mrules-save").onclick = async () => {
+  plSettings.macro_rules = readMacroRules().filter(r => r.match && r.uuid);
+  if (await savePlSettings(true)) $("#s-macros-msg").innerHTML = '<div class="notice ok">Regeln gespeichert – sie gelten beim nächsten Laden eines Ablaufplans.</div>';
+};
+$("#s-macros-save").onclick = async () => {
+  plSettings.macros_file = $("#s-macros").value.trim();
+  if (await savePlSettings(false)) $("#s-macros-msg").innerHTML = "";
+};
+$("#s-macros").onkeydown = e => { if (e.key === "Enter") $("#s-macros-save").click(); };
+
 /* Einstellungen + Bibliothek */
 function applyLibrary(data) {
   plLib = data; plSettings = data.settings;
+  macroList = data.macros || [];
+  $("#s-macros").value = plSettings.macros_file || "";
+  $("#s-macros").placeholder = data.macrosFile && !plSettings.macros_file ? "automatisch: " + data.macrosFile : "Pfad zur Datei „Macros“ eintragen";
+  $("#s-macros-info").innerHTML = macroList.length
+    ? `<span style="color:var(--ok)">✓</span> ${macroList.length} Makros: ${macroList.slice(0, 8).map(m => esc(m.name)).join(", ")}${macroList.length > 8 ? " …" : ""}`
+    : `<span style="color:var(--danger)">${esc(data.macrosError || "Keine Makros gefunden.")}</span>`;
+  renderMacroRules();
   docByRel = new Map(data.docs.map(d => [d.rel, d]));
   docByLabel = new Map(data.docs.map(d => [`${d.library}/${d.name}`, d]));
   let dl = $("#pl-docs");
@@ -1934,7 +2022,8 @@ $("#pl-start").onclick = async () => {
   try {
     const res = await fetch("/api/playlist", {method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({name: $("#pl-name").value, settings: plSettings,
-        items: plan.rows.map(r => ({type: r.type, title: r.title, include: r.include, rel: r.type === "song" ? r.rel : "", media: r.media || null, auto: r.auto || ""}))})});
+        items: plan.rows.map(r => ({type: r.type, title: r.title, include: r.include, rel: r.type === "song" ? r.rel : "", media: r.media || null, auto: r.auto || "",
+          macros: r.macros || [], macro: r.macro || null}))})});
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     const blob = await res.blob();
     const m = (res.headers.get("Content-Disposition") || "").match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)/i);
@@ -2432,7 +2521,13 @@ $("#du-delete").onclick = async () => {
   }
   b.disabled = true;
   try {
-    const res = await api("/api/pp/duplicates/delete", {method: "POST", body: {paths: [...duSel]}});
+    // je gelöschter Datei: welche Datei der Gruppe bleibt (für den Abgleich – das Lied gilt dann als vorhanden)
+    const aliases = [];
+    for (const g of dupes.groups) {
+      const kept = g.files.find(f => f.keep && !duSel.has(f.path)) || g.files.find(f => !duSel.has(f.path));
+      if (kept) g.files.forEach(f => { if (duSel.has(f.path)) aliases.push({deleted: f.path, kept: kept.path}); });
+    }
+    const res = await api("/api/pp/duplicates/delete", {method: "POST", body: {paths: [...duSel], aliases}});
     duSel.clear();
     $("#du-result").innerHTML = `<div class="notice ${res.failed.length ? "warn" : "ok"}">${res.moved.length} Präsentation(en) aus der ProPresenter-Bibliothek gelöscht
       (Sicherheitskopie in <code>${esc(res.backup)}</code>).

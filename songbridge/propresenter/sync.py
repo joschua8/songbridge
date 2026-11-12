@@ -204,8 +204,16 @@ class DiffRow:
         }
 
 
-def diff(songs_dir: Path, pp_dir: Path | None, index: dict, style=None) -> list[DiffRow]:
-    """style: Exportformatierung – ist dort die Titelfolie an, fehlt sie aber in ProPresenter, gilt das Lied als abweichend."""
+def alias_key(name: str) -> str:
+    return norm_name(nfc(name))
+
+
+def diff(songs_dir: Path, pp_dir: Path | None, index: dict, style=None, aliases: dict | None = None) -> list[DiffRow]:
+    """style: Exportformatierung – ist dort die Titelfolie an, fehlt sie aber in ProPresenter, gilt das Lied als abweichend.
+
+    aliases: {alias_key(gelöschter Dateiname): behaltener Dateiname} aus der Duplikat-Ansicht – ein Lied, dessen
+    Duplikat gelöscht wurde, gilt als in der behaltenen Datei vorhanden (statt als fehlend).
+    """
     db = db_songs(songs_dir, index)
     files = pp_files(pp_dir)
     by_stem = {nfc(f.stem).casefold(): f for f in files}
@@ -229,6 +237,38 @@ def diff(songs_dir: Path, pp_dir: Path | None, index: dict, style=None) -> list[
         if f:
             pairs[s.id] = f
             used.add(f)
+    how: dict[str, str] = {}
+    # 3. Durchgang: Duplikat wurde in SongBridge gelöscht -> behaltene Datei (darf mehrfach zugeordnet werden)
+    by_name = {nfc(f.name).casefold(): f for f in files}
+    for s in db:
+        if s.id in pairs or not aliases:
+            continue
+        kept = aliases.get(alias_key(s.stem)) or aliases.get(alias_key(s.name))
+        f = by_name.get(nfc(kept).casefold()) if kept else None
+        if f:
+            pairs[s.id], how[s.id] = f, "alias"
+            used.add(f)
+    # 4. Durchgang: gleicher Liedtext unter anderem Namen (z. B. nach dem Aufräumen von Duplikaten)
+    open_songs = [s for s in db if s.id not in pairs and s.song is not None]
+    if open_songs:
+        keys: dict[Path, frozenset] = {}
+        for f in files:
+            try:
+                k = frozenset(n for n in (norm_line(x) for x in pro_lines(f)[1]) if n)
+            except Exception:
+                continue
+            if len(k) >= 3:
+                keys.setdefault(f, k)
+        by_key: dict[frozenset, list[Path]] = {}
+        for f, k in keys.items():
+            by_key.setdefault(k, []).append(f)
+        for s in open_songs:
+            k = frozenset(n for n in (norm_line(x) for x in song_lines(s.song)) if n)
+            cands = by_key.get(k, []) if len(k) >= 3 else []
+            f = next((c for c in cands if c not in used), cands[0] if cands else None)
+            if f:
+                pairs[s.id], how[s.id] = f, "text"
+                used.add(f)
 
     rows: list[DiffRow] = []
     for s in db:
@@ -245,8 +285,11 @@ def diff(songs_dir: Path, pp_dir: Path | None, index: dict, style=None) -> list[
             rows.append(DiffRow("error", s.name, s, f, note=f".pro nicht lesbar: {exc}"))
             continue
         same, only_db, only_pp = compare_lines(song_lines(s.song), lines)
-        note = "" if nfc(f.stem) == nfc(s.stem) else f"Dateiname in ProPresenter: {nfc(f.name)}"
-        if same and style is not None and style.title_slide and s.song.title.strip():
+        note = ("" if nfc(f.stem) == nfc(s.stem)
+                else f"in ProPresenter als „{nfc(f.name)}“ (Duplikat entfernt)" if how.get(s.id) == "alias"
+                else f"in ProPresenter als „{nfc(f.name)}“ (gleicher Text, anderer Name)" if how.get(s.id) == "text"
+                else f"Dateiname in ProPresenter: {nfc(f.name)}")
+        if same and style is not None and style.title_slide and s.song.title.strip() and s.id not in how:
             # Fehlt die Titelfolie oder steht anderes drauf (z. B. ältere Fassung ohne Autor/Copyright) -> neu schreiben.
             want = [t for k, t in pro_export.title_slide(s.song, style) if t.strip()]
             problem = ("Titelfolie fehlt" if title is None
@@ -370,7 +413,9 @@ class DupFile:
 
     @property
     def lines(self) -> list[str]:
-        return [ln for g in self.structure.get("groups", []) for sl in g["slides"] for ln in sl]
+        """Liedtext ohne Titelfolie (die trägt den Liednamen und würde gleiche Lieder unterschiedlich machen)."""
+        return [ln for g in self.structure.get("groups", []) if g["name"] != pro_export.TITLE_NAME
+                for sl in g["slides"] for ln in sl]
 
     @property
     def is_copy(self) -> bool:

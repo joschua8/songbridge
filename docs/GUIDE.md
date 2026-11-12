@@ -91,6 +91,20 @@ split into slides:
 - **Absatz** (paragraph): every paragraph of the song file becomes exactly one slide. If the text does not fit
   into the text box, ProPresenter automatically scales the font down.
 
+## Macros in the service plan
+
+Under **Einstellungen → Makros** (settings → macros) SongBridge reads the macros from ProPresenter (the file "Macros"
+in the ProPresenter folder under `Configuration`). If it is not found automatically, enter the path yourself. Below,
+create **rules**: *agenda item contains* (e.g. "Begrüßung") → *macro* → *type*:
+
+- **an die Kopfzeile** (on the header): the macro fires when the header is clicked in ProPresenter (like timers).
+  A pink agenda item with a macro is included automatically for this.
+- **eigene Folie davor / danach** (own slide before / after): a separate playlist item with an empty slide that
+  fires the macro when clicked.
+
+In the service plan macros appear as a chip (⚡) on the agenda item or as their own row – both can be ticked or
+unticked before exporting.
+
 ## Finding duplicates in ProPresenter
 
 **ProPresenter → Duplikate** (duplicates) lists songs that exist more than once in your ProPresenter song library:
@@ -108,6 +122,10 @@ Red = only on the left, green = only on the right, yellow = changed (changed wor
 the suggested ones; "… löschen" (delete) has to be clicked twice. Deleted presentations are removed from the
 ProPresenter library folder immediately; a safety copy is kept in `backup/geloescht/` in the data folder. If
 ProPresenter still lists a deleted song, restart ProPresenter once.
+
+**Abgleich** (library sync) remembers which file was kept instead of a deleted duplicate: the song then counts as
+present ("Duplikat entfernt") and is no longer reported as missing. It also finds songs stored in ProPresenter under
+a different name but with the same lyrics.
 
 ## Text formatting
 
