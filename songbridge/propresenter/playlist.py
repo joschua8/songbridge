@@ -966,8 +966,12 @@ def build_playlist(name: str, entries: list[dict], root: Path | None,
     doc.type = propresenter_pb2.PlaylistDocument.TYPE_PRESENTATION
     node = doc.root_node
     node.uuid.string = _uuid()
-    node.name = "PLAYLIST"
-    node.expanded = True
+    # Wie in ProPresenters eigenem Export: Wurzelknoten vom Typ ROOT. Fehlt das, legt ProPresenter unter Windows
+    # keine Playlist an, sondern übernimmt nur die mitgelieferten Präsentationen in eine Bibliothek.
+    node.type = type(node).TYPE_ROOT
+    if not sys.platform.startswith("win"):
+        node.name = "PLAYLIST"
+        node.expanded = True
     pl = node.playlists.playlists.add()
     pl.uuid.string = _uuid()
     pl.name = name
