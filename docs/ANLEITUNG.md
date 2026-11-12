@@ -95,6 +95,19 @@ Folien verteilt wird:
 - **Absatz:** Jeder Absatz der Lieddatei wird genau eine Folie. Passt der Text nicht in die Textbox,
   verkleinert ProPresenter die Schrift automatisch.
 
+## Makros im Ablaufplan
+
+Unter **Einstellungen → Makros** liest SongBridge die Makros aus ProPresenter (die Datei „Macros“ im
+ProPresenter-Ordner unter `Configuration`). Wird sie nicht automatisch gefunden, trägst du den Pfad selbst ein.
+Darunter legst du **Regeln** an: *Ablaufpunkt enthält* (z. B. „Begrüßung“) → *Makro* → *Art*:
+
+- **an die Kopfzeile:** Das Makro wird beim Anklicken der Kopfzeile in ProPresenter ausgelöst (wie die Timer).
+  Ein rosa Ablaufpunkt mit Makro wird dafür automatisch übernommen.
+- **eigene Folie davor / danach:** Eine eigene Playlist-Zeile mit einer leeren Folie, die beim Anklicken das Makro auslöst.
+
+Im Ablaufplan erscheinen die Makros als Chip (⚡) am Ablaufpunkt bzw. als eigene Zeile – beides lässt sich vor dem
+Export per Häkchen ab- oder anwählen.
+
 ## Duplikate in ProPresenter finden
 
 **ProPresenter → Duplikate** zeigt Lieder, die in der ProPresenter-Lieder-Bibliothek mehrfach vorhanden sind:
@@ -112,6 +125,10 @@ Rot = nur links, grün = nur rechts, gelb = geändert (geänderte Wörter markie
 vorgeschlagenen; „… löschen“ muss zweimal geklickt werden. Gelöschte Präsentationen werden sofort aus dem Ordner der
 ProPresenter-Bibliothek entfernt; eine Sicherheitskopie bleibt in `backup/geloescht/` im Datenordner. Zeigt
 ProPresenter ein gelöschtes Lied noch an, ProPresenter einmal neu starten.
+
+Der **Abgleich** merkt sich, welche Datei statt eines gelöschten Duplikats behalten wurde: Das Lied gilt dann als
+vorhanden („Duplikat entfernt“) und wird nicht wieder als fehlend gemeldet. Außerdem findet der Abgleich Lieder,
+die in ProPresenter unter einem anderen Namen, aber mit gleichem Text liegen.
 
 ## Textformatierung
 

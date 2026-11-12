@@ -88,6 +88,9 @@ class PlaylistSettings:
     add_lords_prayer: bool = True        # Vaterunser unter dem Ablaufpunkt „Vaterunser“ einfügen
     add_silence: bool = True             # Stille-Bilder unter dem Ablaufpunkt „Stille“ einfügen
     convert_pdfs: bool = False           # PDFs am Termin standardmäßig in Folienbilder umwandeln (sonst nur Hinweis)
+    macros_file: str = ""                # ProPresenter-Makrodatei (leer = automatisch suchen)
+    # Makro-Regeln: {match: Text im Ablaufpunkt, uuid, name: Makro, mode: header | slide-before | slide-after}
+    macro_rules: list = field(default_factory=list)
     silence_dir: str = ""                # Ordner mit den Stille-Bildern (.jpg/.png)
     # Lieder-.pro mit in die Playlist packen, wie ProPresenters eigener Export. Unter Windows nötig
     # (sonst bleiben die Lied-Einträge leer); unter macOS legt ProPresenter damit Duplikate an.
@@ -102,6 +105,8 @@ class PlaylistSettings:
             value, default = data[f.name], getattr(s, f.name)
             if isinstance(default, bool):
                 setattr(s, f.name, bool(value))
+            elif f.name == "macro_rules":
+                s.macro_rules = _macro_rules(value)
             elif isinstance(default, list):
                 if isinstance(value, list):
                     setattr(s, f.name, [str(v) for v in value if isinstance(v, str)])
@@ -110,7 +115,7 @@ class PlaylistSettings:
                     setattr(s, f.name, value.lower())
             elif isinstance(value, str):
                 value = value.strip()
-                if f.name in ("show_root", "song_library", "silence_dir"):
+                if f.name in ("show_root", "song_library", "silence_dir", "macros_file"):
                     value = value.strip('"\'').strip()  # Windows „Als Pfad kopieren“ setzt Anführungszeichen
                 setattr(s, f.name, value)
         return s
@@ -155,6 +160,108 @@ def load_settings(path: Path | None = None) -> PlaylistSettings:
 
 def save_settings(settings: PlaylistSettings, path: Path | None = None) -> None:
     (path or SETTINGS_PATH).write_text(json.dumps(settings.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+MACRO_MODES = ("header", "slide-before", "slide-after")
+
+
+def _macro_rules(value) -> list[dict]:
+    rules = []
+    for r in value if isinstance(value, list) else []:
+        if not isinstance(r, dict):
+            continue
+        match, uuid_, name = (" ".join(str(r.get(k) or "").split()) for k in ("match", "uuid", "name"))
+        if match and uuid_:
+            rules.append({"match": match, "uuid": uuid_, "name": name or match,
+                          "mode": r.get("mode") if r.get("mode") in MACRO_MODES else "header"})
+    return rules
+
+
+# ------------------------------------------------------------------ Makros
+
+
+def macro_file_candidates(settings: PlaylistSettings) -> list[Path]:
+    """Mögliche Orte der ProPresenter-Makrodatei („Macros“ im Ordner Configuration)."""
+    bases: list[Path] = []
+    root = settings.root()
+    if root:
+        bases += [root, *list(root.parents)[:3]]
+    home = Path.home()
+    bases.append(home / "Library/Application Support/RenewedVision/ProPresenter")
+    if os.environ.get("APPDATA"):
+        bases.append(Path(os.environ["APPDATA"]) / "RenewedVision" / "ProPresenter")
+    out: list[Path] = []
+    for b in bases:
+        for c in (b / "Configuration" / "Macros", b / "Macros"):
+            if c not in out:
+                out.append(c)
+    return out
+
+
+def load_macros(path: Path) -> list[dict]:
+    """Makros aus einer ProPresenter-Makrodatei: [{uuid, name, color}]. ValueError, wenn es keine ist."""
+    import macros_pb2
+    if path.is_dir():
+        path = path / "Macros"
+    try:
+        doc = macros_pb2.MacrosDocument()
+        doc.ParseFromString(path.read_bytes())
+    except OSError as exc:
+        raise ValueError(f"Datei nicht lesbar: {exc}") from exc
+    except Exception as exc:
+        raise ValueError("keine ProPresenter-Makrodatei") from exc
+    macros = [{"uuid": m.uuid.string, "name": m.name,
+               "color": "#%02x%02x%02x" % tuple(round(v * 255) for v in (m.color.red, m.color.green, m.color.blue))}
+              for m in doc.macros if m.uuid.string and m.name]
+    if not macros:
+        raise ValueError("keine Makros in der Datei gefunden")
+    return macros
+
+
+def find_macros(settings: PlaylistSettings) -> tuple[Path | None, list[dict], str]:
+    """-> (Datei, Makros, Fehler). Eingetragene Datei, sonst die erste lesbare unter den üblichen Orten."""
+    if settings.macros_file:
+        path = Path(settings.macros_file).expanduser()
+        try:
+            return path, load_macros(path), ""
+        except ValueError as exc:
+            return path, [], f"{path}: {exc}"
+    for cand in macro_file_candidates(settings):
+        if cand.is_file():
+            try:
+                return cand, load_macros(cand), ""
+            except ValueError:
+                continue
+    return None, [], "Keine ProPresenter-Makrodatei gefunden – bitte den Pfad eintragen."
+
+
+def apply_macro_rules(rows: list[dict], settings: PlaylistSettings) -> list[dict]:
+    """Makro-Regeln auf den Ablauf anwenden: an Kopfzeilen hängen (row["macros"]) oder eigene Makro-Zeilen einfügen.
+
+    Treffer: der Regeltext steckt im Titel des Ablaufpunkts (Groß/klein, Satzzeichen egal).
+    """
+    rules = settings.macro_rules
+    if not rules:
+        return rows
+    out: list[dict] = []
+    for row in rows:
+        if row.get("type") not in ("header", "normal") or row.get("auto"):
+            out.append(row)
+            continue
+        title = norm_name(row.get("title") or "")
+        before, after = [], []
+        for n, r in enumerate(rules):
+            if not norm_name(r["match"]) or norm_name(r["match"]) not in title:
+                continue
+            macro = {"uuid": r["uuid"], "name": r["name"]}
+            if r["mode"] == "header":
+                row.setdefault("macros", []).append({**macro, "on": True})
+            else:
+                mrow = _auto_row(f"macro-{row.get('id')}-{n}", "macro", "macro", r["name"], row.get("before", False),
+                                 macro=macro, target=row.get("title") or "", position=r["mode"].split("-")[1])
+                (before if r["mode"] == "slide-before" else after).append(mrow)
+        out.extend(before + [row] + after)
+    return out
 
 
 # ------------------------------------------------------------------ Bibliothek
@@ -523,7 +630,7 @@ def add_auto_rows(rows: list[dict], matcher: Matcher, root: Path | None, setting
                                  error=silence_error))
     if skipped:
         out.append(_auto_row("auto-skipped", "header", "skipped", "Nicht übernommene Dateien: " + ", ".join(skipped)))
-    return out
+    return apply_macro_rules(out, settings)
 
 
 # ------------------------------------------------------------------ Medien-Präsentationen
@@ -729,6 +836,51 @@ def media_presentation(name: str, media: list[tuple[Path, str]], root: Path | No
     return pres
 
 
+def _macro_action(action, macro: dict, key: str) -> None:
+    """Aktion „Makro auslösen“ – Verweis über die Makro-ID samt Namen (wie Timer-Aktionen an Kopfzeilen)."""
+    import action_pb2
+    action.uuid.string = _uid(key, "macro-action", macro["uuid"])
+    action.name = macro.get("name") or ""
+    action.isEnabled = True
+    action.type = action_pb2.Action.ACTION_TYPE_MACRO
+    action.macro.identification.parameter_uuid.string = macro["uuid"]
+    action.macro.identification.parameter_name = macro.get("name") or ""
+
+
+def macro_presentation(name: str, macro: dict):
+    """Präsentation mit einer leeren Folie, die beim Anklicken das Makro auslöst („Makro als eigene Folie“)."""
+    import action_pb2
+    from songbridge.propresenter.export import get_template
+
+    pres = copy.deepcopy(get_template().base)
+    pres.uuid.string = _uid("macro", macro["uuid"], name)
+    pres.name = name
+    group = pres.cue_groups.add()
+    group.group.uuid.string = _uid(name, "macro-group")
+    group.group.name = name
+    cue = pres.cues.add()
+    cue.uuid.string = _uid(name, "macro-cue")
+    cue.isEnabled = True
+    cue.completion_action_type = cue.COMPLETION_ACTION_TYPE_LAST
+    slide = cue.actions.add()
+    slide.uuid.string = _uid(name, "macro-slide-action")
+    slide.isEnabled = True
+    slide.type = action_pb2.Action.ACTION_TYPE_PRESENTATION_SLIDE
+    slide.label.text = name
+    base = slide.slide.presentation.base_slide
+    base.uuid.string = _uid(name, "macro-slide")
+    base.size.width, base.size.height = 1920, 1080
+    base.background_color.alpha = 1
+    _macro_action(cue.actions.add(), macro, name)
+    group.cue_identifiers.add().string = cue.uuid.string
+    arr = pres.arrangements.add()
+    arr.uuid.string = _uid(name, "macro-arrangement")
+    arr.name = "Standard"
+    arr.group_identifiers.add().string = group.group.uuid.string
+    pres.selected_arrangement.string = arr.uuid.string
+    return pres
+
+
 def _bundle_name(path: Path, taken: set[str]) -> str:
     stem = re.sub(r'[\\/:*?"<>|]+', "_", nfc(path.stem)).strip() or "Datei"
     name, n = f"{stem}{path.suffix.lower()}", 2
@@ -838,8 +990,14 @@ def build_playlist(name: str, entries: list[dict], root: Path | None,
             for f, bundle_name in media:
                 bundle[f"Media/{bundle_name}"] = f
             _document_url(item.presentation.document_path, root, f"Libraries/{BUNDLE_LIBRARY}/{stem}.pro")
+        elif e["kind"] == "macro":
+            stem = unique_stem(file_stem(e["name"]), taken_pro)
+            bundle[f"{stem}.pro"] = macro_presentation(e["name"], e["macro"]).SerializeToString()
+            _document_url(item.presentation.document_path, root, f"Libraries/{BUNDLE_LIBRARY}/{stem}.pro")
         else:
             _set_color(item.header.color, e.get("color") or DEFAULT_ITEM_COLOR)
+            for m in e.get("macros") or []:
+                _macro_action(item.header.actions.add(), m, item.uuid.string)
     return doc
 
 
@@ -861,6 +1019,11 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
             continue
         kind = row.get("type")
         title = (row.get("title") or "").strip()
+        if kind == "macro":
+            macro = row.get("macro") or {}
+            if macro.get("uuid"):
+                entries.append({"kind": "macro", "name": title or macro.get("name") or "Makro", "macro": macro})
+            continue
         if kind == "media":
             try:
                 files = resolve_media(row) if resolve_media else []
@@ -888,7 +1051,8 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
             color = settings.header_color if kind == "header" else settings.item_color
             if row.get("auto") == "skipped":
                 color = MISSING_COLOR
-            entries.append({"kind": "header", "name": title, "color": color})
+            macros = [m for m in row.get("macros") or [] if m.get("on", True) and m.get("uuid")]
+            entries.append({"kind": "header", "name": title, "color": color, "macros": macros})
     if pdfs_off and not has_skipped_row:
         entries.append({"kind": "header", "name": "Nicht übernommene Dateien: " + ", ".join(pdfs_off), "color": MISSING_COLOR})
     return entries, notes

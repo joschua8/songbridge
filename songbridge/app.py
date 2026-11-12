@@ -62,7 +62,16 @@ APP_SETTINGS_PATH = Path(os.environ.get("APP_SETTINGS", paths.DATA_DIR / "app_se
 BACKUP_DIR = Path(os.environ.get("PP_BACKUP_DIR", paths.DATA_DIR / "backup"))
 # Originalfassung bearbeiteter ChurchTools-Lieder (für „Original wiederherstellen“), gleicher relativer Pfad wie in songs/.
 ORIGINALS_DIR = paths.DATA_DIR / "backup" / "originale"
-REPLACED_DIR = paths.DATA_DIR / "backup" / "ersetzt"   # beim Hochladen/Erfassen ersetzte Lieder
+REPLACED_DIR = paths.DATA_DIR / "backup" / "ersetzt"
+ALIASES_PATH = paths.DATA_DIR / "pp_aliases.json"  # gelöschte Duplikate -> behaltene Präsentation (für den Abgleich)
+
+
+def load_aliases() -> dict[str, str]:
+    try:
+        data = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}   # beim Hochladen/Erfassen ersetzte Lieder
 
 app = Flask(__name__, static_folder=None)
 
@@ -737,7 +746,13 @@ def playlist_library():
         "docs": [d.to_json() for d in docs],
         "settings": settings.to_dict(),
         "silenceCount": len(playlist.silence_images(settings)),
+        **_macros_info(settings),
     })
+
+
+def _macros_info(settings) -> dict:
+    path, macros, err = playlist.find_macros(settings)
+    return {"macrosFile": str(path) if path else "", "macros": macros, "macrosError": err}
 
 
 @app.put("/api/playlist/settings")
@@ -745,6 +760,11 @@ def put_playlist_settings():
     settings = playlist.PlaylistSettings.from_dict(request.get_json(silent=True))
     if settings.show_root and not (Path(settings.show_root).expanduser() / "Libraries").is_dir():
         return error(f"Im Ordner „{settings.show_root}“ gibt es keinen Unterordner „Libraries“.")
+    if settings.macros_file:
+        try:
+            playlist.load_macros(Path(settings.macros_file).expanduser())
+        except ValueError as exc:
+            return error(f"Makrodatei „{settings.macros_file}“: {exc}")
     if settings.song_library and not Path(settings.song_library).expanduser().is_dir():
         return error(f"Den Ordner „{settings.song_library}“ gibt es nicht.")
     if settings.silence_dir and not Path(settings.silence_dir).expanduser().is_dir():
@@ -951,7 +971,7 @@ def pp_diff():
     if not pp_dir or not pp_dir.is_dir():
         return jsonify({"error": "Keine ProPresenter-Lieder-Bibliothek gefunden – bitte unter Einstellungen den Ordner angeben.",
                         "needsSettings": True}), 400
-    rows = pp_sync.diff(SONGS_DIR, pp_dir, dl.load_index(SONGS_DIR), pro_export.load_style())
+    rows = pp_sync.diff(SONGS_DIR, pp_dir, dl.load_index(SONGS_DIR), pro_export.load_style(), load_aliases())
     counts: dict[str, int] = {}
     for r in rows:
         counts[r.status] = counts.get(r.status, 0) + 1
@@ -998,6 +1018,15 @@ def pp_duplicates_delete():
     if not paths:
         return error("Keine Dateien ausgewählt.")
     moved, failed, folder = pp_sync.delete_to_backup(paths, BACKUP_DIR)
+    # Merken, welche Datei statt der gelöschten behalten wurde – sonst meldet der Abgleich das Lied als fehlend.
+    aliases = load_aliases()
+    for pair in data.get("aliases") or []:
+        deleted, kept = Path(str(pair.get("deleted") or "")), Path(str(pair.get("kept") or ""))
+        if deleted.name and kept.name and playlist.nfc(deleted.name) in moved and kept.is_file():
+            aliases[pp_sync.alias_key(deleted.stem)] = playlist.nfc(kept.name)
+            aliases[pp_sync.alias_key(pp_sync.base_title(deleted.stem))] = playlist.nfc(kept.name)
+    if aliases:
+        ALIASES_PATH.write_text(json.dumps(aliases, indent=1, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     return jsonify({"moved": moved, "failed": failed, "backup": str(folder) if folder else ""})
 
 
@@ -1016,7 +1045,7 @@ def pp_write():
     if not pp_dir or not pp_dir.is_dir():
         return error("Keine ProPresenter-Lieder-Bibliothek gefunden – bitte unter Einstellungen den Ordner angeben.")
     index = dl.load_index(SONGS_DIR)
-    rows = {r.db.id: r for r in pp_sync.diff(SONGS_DIR, pp_dir, index, pro_export.load_style()) if r.db and r.db.id in ids}
+    rows = {r.db.id: r for r in pp_sync.diff(SONGS_DIR, pp_dir, index, pro_export.load_style(), load_aliases()) if r.db and r.db.id in ids}
     targets, chosen, skipped = {}, [], []
     for sid, r in rows.items():
         if r.status == "db_only":
