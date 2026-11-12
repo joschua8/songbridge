@@ -25,8 +25,13 @@ a = Analysis(
     # pymupdf >= 2 imports an AI layout module (onnxruntime + model files) that SongBridge does not need
     # (it only renders PDF pages to images). When bundled, its data files were missing and the playlist
     # export crashed. Without the module, pymupdf catches the ImportError itself.
-    excludes=["tkinter", "pymupdf.layout", "pymupdf4llm", "onnxruntime", "networkx"],
+    excludes=["tkinter", "pymupdf.layout", "pymupdf4llm", "onnxruntime", "networkx", "numpy"],
 )
+# The module exclusion does not drop the data files the pymupdf hook collects (ONNX models of the layout module,
+# ~50 MB, and the MuPDF developer headers) – filter them out, they are never used.
+_SKIP = ("pymupdf/layout/", "pymupdf/mupdf-devel/", "pymupdf\\layout\\", "pymupdf\\mupdf-devel\\")
+a.datas = [d for d in a.datas if not any(x in d[0] for x in _SKIP)]
+a.binaries = [b for b in a.binaries if not any(x in b[0] for x in _SKIP)]
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
