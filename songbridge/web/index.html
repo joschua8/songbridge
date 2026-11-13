@@ -1316,7 +1316,7 @@ function buildStyleForm() {
     if (type === "number") input = `<input type="number" data-k="${key}" min="${opt.min}" max="${opt.max}" step="${opt.step || 1}">`;
     else if (type === "color") input = `<input type="color" data-k="${key}">`;
     else if (type === "check") input = `<input type="checkbox" data-k="${key}" style="justify-self:start">`;
-    else if (type === "font") input = `<select data-k="${key}">${fonts.map(f => `<option value="${esc(f.name)}" style="font-family:${esc(f.css)}">${esc(f.name)}</option>`).join("")}</select>`;
+    else if (type === "font") input = `<select data-k="${key}">${fonts.map(f => `<option value="${esc(f.name)}" style="font-family:${esc(f.css)}">${esc(f.name)}${f.windows ? " (auch Windows)" : ""}</option>`).join("")}</select>`;
     else if (type === "seg") input = `<div class="seg" data-k="${key}">${opt.map(([v, l]) => `<button type="button" data-v="${v}">${l}</button>`).join("")}</div>`;
     else if (type === "toggles") input = `<div class="toggles">
         <button type="button" data-k="${key}.bold" title="Fett"><b>F</b></button>

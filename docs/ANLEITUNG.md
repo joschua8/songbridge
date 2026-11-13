@@ -158,3 +158,7 @@ Unter Windows zeigt ProPresenter die Lieder einer Playlist nur an, wenn sie in d
 werden. Deshalb ist dort „Lieder in die Playlist-Datei packen“ (Ablaufplan, rechts) eingeschaltet.
 Beim Öffnen fragt ProPresenter dann, ob vorhandene Präsentationen ersetzt werden sollen.
 Unter macOS bleibt das Häkchen aus – dort reicht der Verweis auf die Bibliothek.
+
+Fragt ProPresenter unter Windows nach einer **Ersatzschrift**, sind die Lieder in einer Schrift formatiert, die es
+unter Windows nicht gibt (z. B. Helvetica). Wähle unter **ProPresenter → Export & Formatierung** eine Schrift mit
+dem Zusatz „(auch Windows)“, z. B. Arial, exportiere die Lieder neu und ersetze sie in der ProPresenter-Bibliothek.
