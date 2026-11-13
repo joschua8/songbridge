@@ -43,7 +43,8 @@ SLIDE_W, SLIDE_H = 1920, 1080
 _NS = uuid.UUID("6f1c7a52-3f0e-4b8e-9a51-7d1e2c0b9a10")
 
 # Schriftfamilie -> PostScript-Namen (normal, fett, kursiv, fett+kursiv), RTF-Familie, CSS für die Vorschau.
-# Nur Schriften, die auf macOS vorinstalliert sind (ProPresenter muss sie finden).
+# Nur Schriften, die auf macOS vorinstalliert sind (ProPresenter muss sie finden). WINDOWS_FONTS gibt es auch
+# unter Windows – sonst fragt ProPresenter dort beim Import nach einer Ersatzschrift.
 FONTS = {
     "Helvetica": (("Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique"), "swiss", "Helvetica"),
     "Helvetica Neue": (("HelveticaNeue", "HelveticaNeue-Bold", "HelveticaNeue-Italic", "HelveticaNeue-BoldItalic"), "swiss", "'Helvetica Neue'"),
@@ -55,6 +56,8 @@ FONTS = {
     "Georgia": (("Georgia", "Georgia-Bold", "Georgia-Italic", "Georgia-BoldItalic"), "roman", "Georgia"),
     "Times New Roman": (("TimesNewRomanPSMT", "TimesNewRomanPS-BoldMT", "TimesNewRomanPS-ItalicMT", "TimesNewRomanPS-BoldItalicMT"), "roman", "'Times New Roman'"),
 }
+
+WINDOWS_FONTS = {"Arial", "Verdana", "Georgia", "Times New Roman"}
 
 # Gruppenfarben (RGB 0..1) je Abschnittstyp, angelehnt an das Beispiel.
 GROUP_COLORS = {
@@ -335,7 +338,8 @@ def _fs(size: float) -> int:
 def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = None) -> str:
     """paragraphs: Liste aus (Art, Text) mit Art in main / trans / spacer, auf der Titelfolie title / meta / gap.
 
-    Aufbau wie von ProPresenter/Cocoa erzeugt: f0 = Hauptschrift, f1 = Helvetica (Rücksetzen),
+    Aufbau wie von ProPresenter/Cocoa erzeugt: f0 = Hauptschrift, f1 = Hauptschrift ohne Schnitt (Rücksetzen –
+    früher fest Helvetica, die es unter Windows nicht gibt: ProPresenter fragte dann nach einer Ersatzschrift),
     f2 = Übersetzungsschrift, f3 = Schrift der Liedangaben (nur auf der Titelfolie); cf1/cf2 = Textfarben.
     """
     style = style or ExportStyle()
@@ -359,7 +363,7 @@ def build_rtf(paragraphs: list[tuple[str, str]], style: ExportStyle | None = Non
         "{\\rtf1\\ansi\\ansicpg1252\\cocoartf2907\n"
         "\\cocoatextscaling0\\cocoaplatform0{\\fonttbl"
         f"\\f0\\f{fam(m)}\\fcharset0 {m.postscript()};"
-        "\\f1\\fswiss\\fcharset0 Helvetica;"
+        f"\\f1\\f{fam(m)}\\fcharset0 {replace(m, bold=False, italic=False).postscript()};"
         f"\\f2\\f{fam(t)}\\fcharset0 {t.postscript()};"
         + (f"\\f3\\f{fam(meta)}\\fcharset0 {meta.postscript()};" if has_meta else "") + "\n}\n"
         "{\\colortbl;" + "".join("\\red%d\\green%d\\blue%d;" % _rgb(c) for c in colors) + "}\n"
@@ -737,6 +741,10 @@ class Template:
                 text.shadow.offset = style.shadow_distance
                 text.shadow.angle = 315
             attrs = text.attributes
+            # Grundschrift des Textfelds = Hauptschrift (die Vorlage hat Helvetica Neue, die es unter Windows nicht gibt)
+            attrs.font.name = replace(style.main, bold=False, italic=False).postscript()
+            attrs.font.family = style.main.font
+            attrs.font.size = style.main.size
             if style.outline:
                 attrs.stroke_width = style.outline_width
                 orr, og, ob = _rgb(style.outline_color)
@@ -903,7 +911,7 @@ def unique_stem(stem: str, taken: set[str]) -> str:
 
 
 def font_choices() -> list[dict]:
-    return [{"name": name, "css": css} for name, (_, _, css) in FONTS.items()]
+    return [{"name": name, "css": css, "windows": name in WINDOWS_FONTS} for name, (_, _, css) in FONTS.items()]
 
 
 def main() -> int:

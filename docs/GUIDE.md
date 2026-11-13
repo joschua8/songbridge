@@ -156,3 +156,7 @@ On Windows, ProPresenter only shows the songs of a playlist if they are bundled 
 "Lieder in die Playlist-Datei packen" (bundle songs into the playlist file, service plan view, right-hand side)
 is enabled there. When opening it, ProPresenter asks whether existing presentations should be replaced.
 On macOS the checkbox stays off – a reference to the library is enough there.
+
+If ProPresenter on Windows asks for a **replacement font**, the songs use a font that does not exist on Windows
+(e.g. Helvetica). Under **ProPresenter → Export & Formatierung** pick a font marked "(auch Windows)" (also on
+Windows), e.g. Arial, export the songs again and replace them in the ProPresenter library.
