@@ -97,8 +97,19 @@ Folien verteilt wird:
 
 ## Makros im Ablaufplan
 
-Unter **Einstellungen → Makros** liest SongBridge die Makros aus ProPresenter (die Datei „Macros“ im
-ProPresenter-Ordner unter `Configuration`). Wird sie nicht automatisch gefunden, trägst du den Pfad selbst ein.
+Unter **Einstellungen → Makros** liest SongBridge die Makros aus ProPresenter. Am zuverlässigsten über das
+**ProPresenter-Netzwerk**: in ProPresenter unter *Einstellungen → Netzwerk* „Netzwerk aktivieren“ anhaken und den
+dort angezeigten Port (z. B. `localhost:1025`) in SongBridge eintragen. So kommen die Makros immer mit ihren
+aktuellen Kennungen – neuere ProPresenter-Versionen speichern Makros in einer Datenbank und haben dabei neue
+Kennungen vergeben. Ohne Netzwerk sucht SongBridge die Makro-Datenbank bzw. die ältere Datei „Macros“ im
+ProPresenter-Ordner; du kannst den Pfad auch selbst eintragen.
+
+Bestehende Regeln mit alten Kennungen werden über den **Makronamen** zugeordnet. Gibt es ein Makro nicht mehr,
+lässt SongBridge es weg, statt einen ungültigen Verweis in die Playlist zu schreiben.
+
+Mit dem Häkchen **Makros in Playlists einfügen** (in den Einstellungen und neben dem Ablaufplan unter *Automatisch
+einfügen*) schaltest du alle Makros ab, ohne die Regeln zu löschen.
+
 Darunter legst du **Regeln** an: *Ablaufpunkt enthält* (z. B. „Begrüßung“) → *Makro* → *Art*:
 
 - **an die Kopfzeile:** Das Makro wird beim Anklicken der Kopfzeile in ProPresenter ausgelöst (wie die Timer).

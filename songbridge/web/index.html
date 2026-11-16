@@ -500,6 +500,7 @@ Refrain</pre>
             <label class="check" style="margin-bottom:6px;font-size:13px"><input type="checkbox" data-pl="add_lords_prayer"> Vaterunser unter „Vaterunser“</label>
             <label class="check" style="margin-bottom:6px;font-size:13px"><input type="checkbox" data-pl="add_silence"> Stille-Bild unter „Stille“</label>
             <label class="check" style="margin-bottom:6px;font-size:13px" title="Sonst erscheinen PDFs nur als Zeile zum Anhaken"><input type="checkbox" data-pl="convert_pdfs"> PDFs am Termin automatisch umwandeln</label>
+            <label class="check" style="margin-bottom:6px;font-size:13px" title="Makros laut den Regeln in den Einstellungen. Ausschalten lässt die Regeln stehen."><input type="checkbox" data-pl="macros_enabled"> Makros (Regeln aus den Einstellungen)</label>
           </fieldset>
           <label class="check" style="margin-top:10px;font-size:13px" title="Unter Windows nötig, damit ProPresenter die Lieder anzeigt (fragt dann, ob vorhandene ersetzt werden sollen). Unter macOS aus lassen, sonst entstehen Duplikate."><input type="checkbox" data-pl="embed_songs"> Lieder in die Playlist-Datei packen</label>
         </div>
@@ -702,7 +703,16 @@ Refrain</pre>
       <div class="panel card">
         <h3>Makros</h3>
         <p class="lead">Makros aus ProPresenter automatisch in die Playlist übernehmen – an Kopfzeilen oder als eigene Folie.</p>
-        <div class="field"><label for="s-macros">ProPresenter-Makrodatei</label>
+        <label class="check" style="margin-bottom:10px;font-size:13px"><input type="checkbox" data-pl="macros_enabled"> Makros in Playlists einfügen
+          <span class="muted">(aus: die Regeln bleiben gespeichert)</span></label>
+        <div class="field"><label for="s-ppapi">ProPresenter-Netzwerk (empfohlen)</label>
+          <div class="path-row"><input type="text" id="s-ppapi" placeholder="z. B. localhost:1025" spellcheck="false">
+            <button class="btn small" id="s-ppapi-save">Übernehmen</button></div>
+          <div class="muted" style="font-size:12px;margin-top:4px">In ProPresenter unter <i>Einstellungen → Netzwerk</i> „Netzwerk aktivieren“ anhaken
+            und den dort angezeigten Port eintragen. SongBridge fragt die Makros dann direkt bei ProPresenter ab – mit den
+            aktuellen Kennungen, auch seit ProPresenter die Makros in einer Datenbank speichert.</div>
+        </div>
+        <div class="field"><label for="s-macros">Sonst: Makrodatei oder -datenbank</label>
           <div class="path-row"><input type="text" id="s-macros" placeholder="automatisch" spellcheck="false">
             <button class="btn small" id="s-macros-save">Übernehmen</button></div>
           <div class="muted" id="s-macros-info" style="font-size:12px;margin-top:4px"></div>
@@ -1752,7 +1762,7 @@ function defaultInclude(row) {
   if (row.auto === "pdf") return !!plSettings.convert_pdfs;
   if (row.type === "macro") return true;
   // Ablaufpunkt mit Makro an der Kopfzeile: Kopfzeile übernehmen, sonst ginge das Makro verloren
-  if ((row.macros || []).some(m => m.on)) return true;
+  if (plSettings.macros_enabled !== false && (row.macros || []).some(m => m.on)) return true;
   if (row.type === "media") return !row.error;
   if (row.before && !plSettings.include_before) return false;
   if (row.type === "normal") return !!plSettings.include_items;
@@ -1803,7 +1813,9 @@ function renderPlan() {
   }
   const color = r => r.auto === "skipped" ? "#ff9500" : r.type === "header" ? plSettings.header_color : plSettings.item_color;
   const fmtDur = s => s ? `${Math.round(s / 60)} Min` : "";
+  const macrosOn = plSettings.macros_enabled !== false;
   $("#plan-list").innerHTML = rows.map((r, i) => {
+    if (r.type === "macro" && !macrosOn) return "";
     const sub = [r.before ? "vor Beginn" : "", fmtDur(r.duration), r.responsible].filter(Boolean).map(esc).join(" · ");
     let body;
     const auto = r.auto ? ' <span class="badge info" title="Automatisch eingefügt">auto</span>' : "";
@@ -1841,7 +1853,7 @@ function renderPlan() {
     } else {
       body = `<div class="ttl"><i class="sw" style="background:${color(r)}"></i><span>${esc(r.title) || '<span class="muted">(ohne Titel)</span>'}</span></div>
         ${sub || r.note ? `<div class="sub">${sub}${sub && r.note ? " · " : ""}${esc(r.note).slice(0, 160)}</div>` : ""}
-        ${(r.macros || []).map((m, j) => `<label class="macro-chip${m.on ? "" : " off"}" title="Makro an der Kopfzeile auslösen">
+        ${(macrosOn ? r.macros || [] : []).map((m, j) => `<label class="macro-chip${m.on ? "" : " off"}" title="Makro an der Kopfzeile auslösen">
           <input type="checkbox" data-mac="${i}:${j}" ${m.on ? "checked" : ""}>⚡ ${esc(m.name)}</label>`).join("")}`;
     }
     return `<li class="${r.type}${r.include ? "" : " off"}"><input type="checkbox" data-inc="${i}" ${r.include ? "checked" : ""} title="In die Playlist übernehmen">
@@ -1855,7 +1867,7 @@ function renderPlan() {
     (sim ? `<span class="badge missing">${sim} ähnlich</span>` : "") + (miss ? `<span class="badge danger">${miss} ${miss === 1 ? "fehlt" : "fehlen"}</span>` : "");
   const status = plan.agenda.isFinal ? "" : " · Entwurf";
   $("#plan-sub").textContent = fmtDate(plan.event.start) + status;
-  $("#pl-start").disabled = !rows.some(r => r.include);
+  $("#pl-start").disabled = !rows.some(r => r.include && (macrosOn || r.type !== "macro"));
 }
 
 $("#plan-list").addEventListener("click", e => {
@@ -1890,8 +1902,12 @@ let macroList = [];
 const MACRO_MODES = [["header", "an die Kopfzeile"], ["slide-before", "eigene Folie davor"], ["slide-after", "eigene Folie danach"]];
 function renderMacroRules() {
   const rules = plSettings.macro_rules || [];
-  const opts = sel => (sel && !macroList.some(m => m.uuid === sel.uuid) ? [{uuid: sel.uuid, name: sel.name + " (nicht gefunden)"}] : [])
-    .concat(macroList).map(m => `<option value="${esc(m.uuid)}" ${sel && sel.uuid === m.uuid ? "selected" : ""}>${esc(m.name)}</option>`).join("");
+  // Gespeicherte Regel über die Kennung, sonst über den Namen finden (ProPresenter hat bei der Umstellung
+  // auf die Datenbank neue Kennungen vergeben).
+  const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const hit = sel => sel && (macroList.find(m => m.uuid.toUpperCase() === sel.uuid.toUpperCase()) || macroList.find(m => same(m.name, sel.name || "")));
+  const opts = sel => (sel && !hit(sel) ? [{uuid: sel.uuid, name: sel.name + " (nicht gefunden)"}] : [])
+    .concat(macroList).map(m => `<option value="${esc(m.uuid)}" ${sel && (hit(sel) || sel).uuid === m.uuid ? "selected" : ""}>${esc(m.name)}</option>`).join("");
   $("#s-mrules").innerHTML = rules.map((r, i) => `<div class="mrule" data-i="${i}">
       <input type="text" class="mr-match" value="${esc(r.match)}" placeholder="Ablaufpunkt enthält, z. B. Begrüßung">
       <select class="mr-macro">${opts(r)}</select>
@@ -1907,7 +1923,7 @@ function readMacroRules() {
   });
 }
 $("#s-mrule-add").onclick = () => {
-  if (!macroList.length) { $("#s-macros-msg").innerHTML = '<div class="notice warn">Erst die Makrodatei angeben – sonst gibt es keine Makros zur Auswahl.</div>'; return; }
+  if (!macroList.length) { $("#s-macros-msg").innerHTML = '<div class="notice warn">Erst das ProPresenter-Netzwerk oder die Makrodatei angeben – sonst gibt es keine Makros zur Auswahl.</div>'; return; }
   plSettings.macro_rules = readMacroRules().concat([{match: "", uuid: macroList[0].uuid, name: macroList[0].name, mode: "header"}]);
   renderMacroRules();
   $("#s-mrules .mrule:last-child .mr-match").focus();
@@ -1926,15 +1942,21 @@ $("#s-macros-save").onclick = async () => {
   if (await savePlSettings(false)) $("#s-macros-msg").innerHTML = "";
 };
 $("#s-macros").onkeydown = e => { if (e.key === "Enter") $("#s-macros-save").click(); };
+$("#s-ppapi-save").onclick = async () => {
+  plSettings.pp_api = $("#s-ppapi").value.trim();
+  if (await savePlSettings(false)) $("#s-macros-msg").innerHTML = "";
+};
+$("#s-ppapi").onkeydown = e => { if (e.key === "Enter") $("#s-ppapi-save").click(); };
 
 /* Einstellungen + Bibliothek */
 function applyLibrary(data) {
   plLib = data; plSettings = data.settings;
   macroList = data.macros || [];
   $("#s-macros").value = plSettings.macros_file || "";
-  $("#s-macros").placeholder = data.macrosFile && !plSettings.macros_file ? "automatisch: " + data.macrosFile : "Pfad zur Datei „Macros“ eintragen";
+  $("#s-ppapi").value = plSettings.pp_api || "";
+  $("#s-macros").placeholder = data.macrosFile && !plSettings.macros_file && !plSettings.pp_api ? "automatisch: " + data.macrosFile : "automatisch";
   $("#s-macros-info").innerHTML = macroList.length
-    ? `<span style="color:var(--ok)">✓</span> ${macroList.length} Makros: ${macroList.slice(0, 8).map(m => esc(m.name)).join(", ")}${macroList.length > 8 ? " …" : ""}`
+    ? `<span style="color:var(--ok)">✓</span> ${macroList.length} Makros (aus ${esc(data.macrosFile)}): ${macroList.slice(0, 8).map(m => esc(m.name)).join(", ")}${macroList.length > 8 ? " …" : ""}`
     : `<span style="color:var(--danger)">${esc(data.macrosError || "Keine Makros gefunden.")}</span>`;
   renderMacroRules();
   docByRel = new Map(data.docs.map(d => [d.rel, d]));
@@ -1985,7 +2007,7 @@ async function savePlSettings(rematch) {
 document.querySelectorAll("[data-pl]").forEach(el => el.onchange = () => {
   const key = el.dataset.pl;
   plSettings[key] = el.type === "checkbox" ? el.checked : el.value;
-  if (plan && (key === "include_items" || key === "include_before"))
+  if (plan && (key === "include_items" || key === "include_before" || key === "macros_enabled"))
     plan.rows.forEach(r => { if (!r.touched) r.include = defaultInclude(r); });
   const auto = {add_lords_prayer: "vaterunser", add_silence: "stille", convert_pdfs: "pdf"}[key];
   if (plan && auto) plan.rows.forEach(r => { if (r.auto === auto) { r.include = defaultInclude(r); r.touched = false; } });

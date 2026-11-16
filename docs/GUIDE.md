@@ -93,8 +93,20 @@ split into slides:
 
 ## Macros in the service plan
 
-Under **Einstellungen → Makros** (settings → macros) SongBridge reads the macros from ProPresenter (the file "Macros"
-in the ProPresenter folder under `Configuration`). If it is not found automatically, enter the path yourself. Below,
+Under **Einstellungen → Makros** (settings → macros) SongBridge reads the macros from ProPresenter. The most reliable
+way is the **ProPresenter network**: in ProPresenter tick "Enable Network" under *Settings → Network* and enter the
+port shown there (e.g. `localhost:1025`) in SongBridge. That way the macros always come with their current IDs –
+newer ProPresenter versions store macros in a database and assigned new IDs during that migration. Without the
+network SongBridge looks for the macro database or the older "Macros" file in the ProPresenter folder; you can also
+enter the path yourself.
+
+Existing rules with old IDs are matched by **macro name**. If a macro no longer exists, SongBridge leaves it out
+instead of writing an invalid reference into the playlist.
+
+The checkbox **Makros in Playlists einfügen** (in the settings and next to the service plan under *Automatisch
+einfügen*) turns all macros off without deleting the rules.
+
+Below,
 create **rules**: *agenda item contains* (e.g. "Begrüßung") → *macro* → *type*:
 
 - **an die Kopfzeile** (on the header): the macro fires when the header is clicked in ProPresenter (like timers).
