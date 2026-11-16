@@ -751,8 +751,8 @@ def playlist_library():
 
 
 def _macros_info(settings) -> dict:
-    path, macros, err = playlist.find_macros(settings)
-    return {"macrosFile": str(path) if path else "", "macros": macros, "macrosError": err}
+    source, macros, err = playlist.find_macros(settings)
+    return {"macrosFile": source, "macros": macros, "macrosError": err}
 
 
 @app.put("/api/playlist/settings")

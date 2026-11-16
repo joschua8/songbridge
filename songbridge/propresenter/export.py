@@ -794,7 +794,8 @@ def song_to_presentation(song: Song, style: ExportStyle | None = None, key: str 
     pres.name = name or song.title
 
     groups, order = song_groups(song, style)
-    pres.notes = arrangement_notes(order, section_labels(song))
+    # Keine Notizen setzen: ProPresenter zeigt sie bei jedem Lied in der Playlist an (die Reihenfolge
+    # steht ohnehin im Arrangement; die Vorschau in SongBridge zeigt sie weiter an).
 
     group_ids = {}
     for grp in groups:

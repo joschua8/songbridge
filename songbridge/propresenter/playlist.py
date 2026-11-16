@@ -88,7 +88,9 @@ class PlaylistSettings:
     add_lords_prayer: bool = True        # Vaterunser unter dem Ablaufpunkt „Vaterunser“ einfügen
     add_silence: bool = True             # Stille-Bilder unter dem Ablaufpunkt „Stille“ einfügen
     convert_pdfs: bool = False           # PDFs am Termin standardmäßig in Folienbilder umwandeln (sonst nur Hinweis)
-    macros_file: str = ""                # ProPresenter-Makrodatei (leer = automatisch suchen)
+    macros_enabled: bool = True          # Makro-Regeln anwenden (aus: Regeln bleiben gespeichert)
+    macros_file: str = ""                # ProPresenter-Makrodatei/-Datenbank (leer = automatisch suchen)
+    pp_api: str = ""                     # ProPresenter-Netzwerk (z. B. „localhost:1025“): Makros von dort holen
     # Makro-Regeln: {match: Text im Ablaufpunkt, uuid, name: Makro, mode: header | slide-before | slide-after}
     macro_rules: list = field(default_factory=list)
     silence_dir: str = ""                # Ordner mit den Stille-Bildern (.jpg/.png)
@@ -115,7 +117,7 @@ class PlaylistSettings:
                     setattr(s, f.name, value.lower())
             elif isinstance(value, str):
                 value = value.strip()
-                if f.name in ("show_root", "song_library", "silence_dir", "macros_file"):
+                if f.name in ("show_root", "song_library", "silence_dir", "macros_file", "pp_api"):
                     value = value.strip('"\'').strip()  # Windows „Als Pfad kopieren“ setzt Anführungszeichen
                 setattr(s, f.name, value)
         return s
@@ -180,29 +182,158 @@ def _macro_rules(value) -> list[dict]:
 # ------------------------------------------------------------------ Makros
 
 
-def macro_file_candidates(settings: PlaylistSettings) -> list[Path]:
-    """Mögliche Orte der ProPresenter-Makrodatei („Macros“ im Ordner Configuration)."""
+_UUID_RE = re.compile(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}")
+_DB_SUFFIXES = (".sqlite", ".sqlite3", ".db")
+
+
+def _pp_bases(settings: PlaylistSettings) -> list[Path]:
     bases: list[Path] = []
     root = settings.root()
     if root:
         bases += [root, *list(root.parents)[:3]]
-    home = Path.home()
-    bases.append(home / "Library/Application Support/RenewedVision/ProPresenter")
-    if os.environ.get("APPDATA"):
-        bases.append(Path(os.environ["APPDATA"]) / "RenewedVision" / "ProPresenter")
-    out: list[Path] = []
-    for b in bases:
+    bases.append(Path.home() / "Library/Application Support/RenewedVision/ProPresenter")
+    for var in ("APPDATA", "LOCALAPPDATA", "PROGRAMDATA"):
+        if os.environ.get(var):
+            bases.append(Path(os.environ[var]) / "RenewedVision" / "ProPresenter")
+    return bases
+
+
+def macro_file_candidates(settings: PlaylistSettings) -> list[Path]:
+    """Mögliche Orte der Makros: neuere ProPresenter-Versionen speichern sie in einer SQLite-Datenbank,
+    ältere in der Datei „Macros“ im Ordner Configuration. Datenbanken zuerst (die alte Datei bleibt nach
+    der Umstellung liegen, hat dann aber veraltete Kennungen)."""
+    dbs: list[Path] = []
+    files: list[Path] = []
+    for b in _pp_bases(settings):
+        for d in (b / "Configuration", b):
+            try:
+                entries = sorted(d.iterdir()) if d.is_dir() else []
+            except OSError:
+                continue
+            for e in entries:
+                if e.suffix.lower() in _DB_SUFFIXES and e.is_file() and e not in dbs:
+                    dbs.append(e)
         for c in (b / "Configuration" / "Macros", b / "Macros"):
-            if c not in out:
-                out.append(c)
+            if c not in files:
+                files.append(c)
+    dbs.sort(key=lambda p: "macro" not in p.name.lower())
+    return dbs + files
+
+
+def _is_sqlite(path: Path) -> bool:
+    try:
+        with path.open("rb") as fh:
+            return fh.read(16) == b"SQLite format 3\x00"
+    except OSError:
+        return False
+
+
+def _color_hex(c) -> str:
+    return "#%02x%02x%02x" % tuple(max(0, min(255, round(float(v or 0) * 255))) for v in c)
+
+
+def _good_macro(uuid_: str, name: str) -> bool:
+    return bool(_UUID_RE.fullmatch(uuid_ or "")) and bool(name) and name.isprintable() and len(name) <= 200
+
+
+def _macro_from_blob(blob: bytes) -> list[dict]:
+    """Ein Makro (oder eine ganze Makroliste) als Protobuf oder JSON in einer Datenbankzelle."""
+    import macros_pb2
+    out = []
+    for cls in (macros_pb2.MacrosDocument.Macro, macros_pb2.MacrosDocument):
+        try:
+            msg = cls()
+            msg.ParseFromString(blob)
+        except Exception:
+            continue
+        for m in msg.macros if cls is macros_pb2.MacrosDocument else [msg]:
+            if _good_macro(m.uuid.string, m.name):
+                out.append({"uuid": m.uuid.string, "name": m.name,
+                            "color": _color_hex((m.color.red, m.color.green, m.color.blue))})
+        if out:
+            return out
+    try:
+        data = json.loads(blob)
+    except (ValueError, UnicodeDecodeError):
+        return []
+    items = data if isinstance(data, list) else [data]
+    for d in items:
+        if isinstance(d, dict):
+            ident = d.get("id") if isinstance(d.get("id"), dict) else d
+            u, n = str(ident.get("uuid") or ""), str(ident.get("name") or "")
+            if _good_macro(u, n):
+                out.append({"uuid": u, "name": n})
     return out
 
 
-def load_macros(path: Path) -> list[dict]:
-    """Makros aus einer ProPresenter-Makrodatei: [{uuid, name, color}]. ValueError, wenn es keine ist."""
+def load_macros_db(path: Path, strict: bool = False) -> list[dict]:
+    """Makros aus ProPresenters SQLite-Datenbank. Der Aufbau ist nicht dokumentiert – daher tolerant:
+    Tabellen mit „macro“ im Namen (Spalten für Kennung + Name), sonst Protobuf/JSON-Zellen.
+    strict: nur Datenbanken mit Makro-Tabelle (bei der automatischen Suche)."""
+    import sqlite3
+    try:
+        con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error as exc:
+        raise ValueError(f"Datenbank nicht lesbar: {exc}") from exc
+    found: dict[str, dict] = {}
+    try:
+        tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        # Erst Tabellen mit „macro“ im Namen; andere nur, wenn es keine solche gibt (dort könnten auch
+        # Folien stecken, die wie Makros aussehen – Kennung + Name).
+        macro_tables = [t for t in tables if "macro" in t.lower()]
+        if strict and not macro_tables:
+            raise ValueError("keine Makro-Tabelle in der Datenbank")
+        for t in macro_tables or tables:
+            q = t.replace('"', '""')
+            cols = [r[1] for r in con.execute(f'PRAGMA table_info("{q}")')]
+            # auch Core-Data-Spalten (macOS): ZNAME, ZUUID …
+            names = {"name", "title", "macroname", "macro_name", "displayname", "display_name"}
+            name_cols = [i for i, c in enumerate(cols) if c.lower() in names or (c[:1] in "zZ" and c[1:].lower() in names)]
+            uuid_cols = sorted(range(len(cols)), key=lambda i: "uuid" not in cols[i].lower())
+            for row in con.execute(f'SELECT * FROM "{q}" LIMIT 5000'):
+                if macro_tables and name_cols:
+                    name = str(row[name_cols[0]] or "").strip()
+                    for i in uuid_cols:
+                        v = row[i]
+                        if isinstance(v, bytes) and len(v) == 16:
+                            v = str(uuid.UUID(bytes=v)).upper()
+                        if isinstance(v, str) and _good_macro(v, name):
+                            found.setdefault(v.upper(), {"uuid": v, "name": name})
+                            break
+                    else:
+                        name = ""
+                    if name:
+                        continue
+                for v in row:
+                    if isinstance(v, bytes) and len(v) > 16:
+                        for m in _macro_from_blob(v):
+                            found.setdefault(m["uuid"].upper(), m)
+                    elif isinstance(v, str) and v[:1] in "[{" and "uuid" in v:
+                        for m in _macro_from_blob(v.encode()):
+                            found.setdefault(m["uuid"].upper(), m)
+    except sqlite3.Error as exc:
+        raise ValueError(f"Datenbank nicht lesbar: {exc}") from exc
+    finally:
+        con.close()
+    if not found:
+        raise ValueError("keine Makros in der Datenbank gefunden")
+    return list(found.values())
+
+
+def load_macros(path: Path, strict: bool = False) -> list[dict]:
+    """Makros aus einer ProPresenter-Makrodatei oder -Datenbank: [{uuid, name, color}]. ValueError, wenn es keine ist."""
     import macros_pb2
     if path.is_dir():
+        dbs = sorted((p for p in path.iterdir() if p.suffix.lower() in _DB_SUFFIXES and p.is_file()),
+                     key=lambda p: "macro" not in p.name.lower())
+        for db in dbs:
+            try:
+                return load_macros_db(db, strict=True)
+            except ValueError:
+                continue
         path = path / "Macros"
+    if _is_sqlite(path):
+        return load_macros_db(path, strict)
     try:
         doc = macros_pb2.MacrosDocument()
         doc.ParseFromString(path.read_bytes())
@@ -210,29 +341,89 @@ def load_macros(path: Path) -> list[dict]:
         raise ValueError(f"Datei nicht lesbar: {exc}") from exc
     except Exception as exc:
         raise ValueError("keine ProPresenter-Makrodatei") from exc
-    macros = [{"uuid": m.uuid.string, "name": m.name,
-               "color": "#%02x%02x%02x" % tuple(round(v * 255) for v in (m.color.red, m.color.green, m.color.blue))}
+    macros = [{"uuid": m.uuid.string, "name": m.name, "color": _color_hex((m.color.red, m.color.green, m.color.blue))}
               for m in doc.macros if m.uuid.string and m.name]
     if not macros:
         raise ValueError("keine Makros in der Datei gefunden")
     return macros
 
 
-def find_macros(settings: PlaylistSettings) -> tuple[Path | None, list[dict], str]:
-    """-> (Datei, Makros, Fehler). Eingetragene Datei, sonst die erste lesbare unter den üblichen Orten."""
+def api_base(addr: str) -> str:
+    """„1025“, „localhost:1025“ oder „http://192.168.0.5:1025“ -> Basis-URL der ProPresenter-Netzwerk-API."""
+    addr = (addr or "").strip().rstrip("/")
+    if not addr:
+        return ""
+    if addr.isdigit():
+        addr = f"localhost:{addr}"
+    if "://" not in addr:
+        addr = "http://" + addr
+    return addr
+
+
+def load_macros_api(addr: str) -> list[dict]:
+    """Makros direkt aus dem laufenden ProPresenter (Einstellungen → Netzwerk → Netzwerk aktivieren).
+    Liefert immer die aktuellen Kennungen – egal, wie ProPresenter sie intern speichert."""
+    import requests
+    base = api_base(addr)
+    try:
+        with requests.Session() as sess:
+            sess.trust_env = False  # ProPresenter läuft im lokalen Netz – keinen System-Proxy verwenden
+            r = sess.get(f"{base}/v1/macros", timeout=3)
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as exc:
+        raise ValueError(f"ProPresenter unter {base} nicht erreichbar – läuft es und ist das Netzwerk aktiviert?") from exc
+    except ValueError as exc:
+        raise ValueError(f"unerwartete Antwort von {base}") from exc
+    out = []
+    for d in data if isinstance(data, list) else []:
+        ident = (d or {}).get("id") or {}
+        u, n = str(ident.get("uuid") or ""), str(ident.get("name") or "")
+        if _good_macro(u, n):
+            c = d.get("color") or {}
+            out.append({"uuid": u, "name": n, "color": _color_hex((c.get("red"), c.get("green"), c.get("blue")))})
+    if not out:
+        raise ValueError(f"ProPresenter unter {base} meldet keine Makros")
+    return out
+
+
+def find_macros(settings: PlaylistSettings) -> tuple[str, list[dict], str]:
+    """-> (Quelle, Makros, Fehler). Reihenfolge: ProPresenter-Netzwerk, eingetragene Datei, übliche Orte."""
+    api_err = ""
+    if settings.pp_api:
+        try:
+            return f"ProPresenter-Netzwerk ({api_base(settings.pp_api)})", load_macros_api(settings.pp_api), ""
+        except ValueError as exc:
+            api_err = str(exc) + " – "
     if settings.macros_file:
         path = Path(settings.macros_file).expanduser()
         try:
-            return path, load_macros(path), ""
+            return str(path), load_macros(path), api_err.rstrip(" –")
         except ValueError as exc:
-            return path, [], f"{path}: {exc}"
+            return str(path), [], f"{api_err}{path}: {exc}"
     for cand in macro_file_candidates(settings):
         if cand.is_file():
             try:
-                return cand, load_macros(cand), ""
+                return str(cand), load_macros(cand, strict=True), api_err.rstrip(" –")
             except ValueError:
                 continue
-    return None, [], "Keine ProPresenter-Makrodatei gefunden – bitte den Pfad eintragen."
+    return "", [], api_err + "Keine ProPresenter-Makros gefunden – bitte Netzwerk-Adresse oder Pfad eintragen."
+
+
+def resolve_macro(macro: dict, macros: list[dict]) -> dict | None:
+    """Gespeichertes Makro auf die aktuelle Liste abbilden: erst über die Kennung, sonst über den Namen
+    (ProPresenter vergibt bei der Umstellung auf die Datenbank neue Kennungen). None = gibt es nicht mehr."""
+    if not macros:
+        return macro  # Liste unbekannt: wie gespeichert übernehmen
+    u = (macro.get("uuid") or "").upper()
+    for m in macros:
+        if m["uuid"].upper() == u:
+            return {"uuid": m["uuid"], "name": m["name"]}
+    name = " ".join((macro.get("name") or "").split()).casefold()
+    for m in macros:
+        if " ".join(m["name"].split()).casefold() == name:
+            return {"uuid": m["uuid"], "name": m["name"]}
+    return None
 
 
 def apply_macro_rules(rows: list[dict], settings: PlaylistSettings) -> list[dict]:
@@ -243,6 +434,8 @@ def apply_macro_rules(rows: list[dict], settings: PlaylistSettings) -> list[dict
     rules = settings.macro_rules
     if not rules:
         return rows
+    _, macros, _ = find_macros(settings)
+    rules = [{**r, **m} for r in rules if (m := resolve_macro(r, macros))]
     out: list[dict] = []
     for row in rows:
         if row.get("type") not in ("header", "normal") or row.get("auto"):
@@ -1025,7 +1218,7 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
         title = (row.get("title") or "").strip()
         if kind == "macro":
             macro = row.get("macro") or {}
-            if macro.get("uuid"):
+            if macro.get("uuid") and settings.macros_enabled:
                 entries.append({"kind": "macro", "name": title or macro.get("name") or "Makro", "macro": macro})
             continue
         if kind == "media":
@@ -1055,7 +1248,8 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
             color = settings.header_color if kind == "header" else settings.item_color
             if row.get("auto") == "skipped":
                 color = MISSING_COLOR
-            macros = [m for m in row.get("macros") or [] if m.get("on", True) and m.get("uuid")]
+            macros = [m for m in row.get("macros") or [] if m.get("on", True) and m.get("uuid")] \
+                if settings.macros_enabled else []
             entries.append({"kind": "header", "name": title, "color": color, "macros": macros})
     if pdfs_off and not has_skipped_row:
         entries.append({"kind": "header", "name": "Nicht übernommene Dateien: " + ", ".join(pdfs_off), "color": MISSING_COLOR})
