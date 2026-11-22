@@ -657,6 +657,28 @@ def default_playlist_name(event: dict, agenda: dict | None = None) -> str:
     return title
 
 
+def tech_notes(item: dict, groups: dict, wanted: str = "Technik") -> str:
+    """Notizen eines Ablaufpunkts für die Dienstgruppe(n), deren Name `wanted` enthält (z. B. „Technik“).
+
+    ChurchTools liefert sie als serviceGroupNotes – [{serviceGroupId, note}]; groups: {id: Name}.
+    """
+    raw = item.get("serviceGroupNotes") or []
+    if isinstance(raw, dict):
+        raw = [{"serviceGroupId": k, "note": v} for k, v in raw.items()]
+    want = norm_name(wanted)
+    out = []
+    for n in raw if isinstance(raw, list) else []:
+        if not isinstance(n, dict):
+            continue
+        group = n.get("serviceGroup") if isinstance(n.get("serviceGroup"), dict) else {}
+        gid = n.get("serviceGroupId", group.get("id"))
+        name = group.get("name") or groups.get(str(gid)) or ""
+        text = str(n.get("note") or n.get("text") or "").strip()
+        if text and want and want in norm_name(name):
+            out.append(text)
+    return "\n".join(out)
+
+
 def plan_items(agenda: dict, matcher: Matcher, fuzzy: bool = True) -> list[dict]:
     """ChurchTools-Ablaufplan -> Zeilen für die Oberfläche (inkl. Lied-Zuordnung)."""
     rows = []
@@ -673,6 +695,7 @@ def plan_items(agenda: dict, matcher: Matcher, fuzzy: bool = True) -> list[dict]
             "type": kind,
             "title": (it.get("title") or "").strip(),
             "note": it.get("note") or "",
+            "tech_note": it.get("_tech_note") or "",
             "duration": it.get("duration") or 0,
             "start": start.strftime("%H:%M") if start else "",
             "before": bool(it.get("isBeforeEvent")),
@@ -1125,6 +1148,21 @@ def _arrangement_uuid(path: Path) -> str:
     return pres.arrangements[0].uuid.string if pres.arrangements else ""
 
 
+def _with_notes(path: Path, notes: str) -> bytes | Path:
+    """Lied-.pro mit den Präsentationsnotizen `notes` (unverändert, wenn sie schon stimmen oder die Datei
+    nicht lesbar ist)."""
+    import presentation_pb2
+    try:
+        pres = presentation_pb2.Presentation()
+        pres.ParseFromString(path.read_bytes())
+    except Exception:
+        return path
+    if pres.notes == notes:
+        return path
+    pres.notes = notes
+    return pres.SerializeToString()
+
+
 def build_playlist(name: str, entries: list[dict], root: Path | None,
                    bundle: dict[str, bytes | Path] | None = None,
                    embed_songs: bool = False) -> propresenter_pb2.PlaylistDocument:
@@ -1142,11 +1180,19 @@ def build_playlist(name: str, entries: list[dict], root: Path | None,
     taken_pro: set[str] = set()
     taken_media: set[str] = set()
     if embed_songs and root:
+        # Notizen der eingepackten Lieder: Technik-Notiz aus ChurchTools, sonst leer – ProPresenter ersetzt
+        # beim Import das Lied in der Bibliothek, so bleibt keine Notiz vom letzten Gottesdienst stehen.
+        song_notes: dict[str, list[str]] = {}
+        for e in entries:
+            if e["kind"] == "presentation" and e.get("notes"):
+                lst = song_notes.setdefault(nfc(Path(e["rel"]).stem).casefold(), [])
+                if e["notes"] not in lst:
+                    lst.append(e["notes"])
         for e in entries:
             f = root / e["rel"] if e["kind"] == "presentation" else None
             if f and f.is_file() and nfc(f.stem).casefold() not in taken_pro:
                 taken_pro.add(nfc(f.stem).casefold())
-                bundle[nfc(f.name)] = f
+                bundle[nfc(f.name)] = _with_notes(f, "\n\n".join(song_notes.get(nfc(f.stem).casefold(), [])))
 
     doc = propresenter_pb2.PlaylistDocument()
     doc.application_info.CopyFrom(get_template().base.application_info)
@@ -1236,7 +1282,8 @@ def playlist_entries(rows: list[dict], settings: PlaylistSettings, docs_by_rel: 
             rel = row.get("rel") or ""
             d = docs_by_rel.get(rel)
             if d:
-                entries.append({"kind": "presentation", "name": nfc(d.name), "rel": d.rel})
+                entries.append({"kind": "presentation", "name": nfc(d.name), "rel": d.rel,
+                                "notes": (row.get("tech_note") or "").strip()})
             elif rel:
                 notes.append(f"„{title}“: Präsentation {rel} nicht (mehr) in der Bibliothek – übersprungen.")
             elif settings.missing_as_header:
