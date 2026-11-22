@@ -157,6 +157,11 @@ class ChurchToolsClient:
             raise ChurchToolsError(f"Ablaufplan nicht abrufbar (HTTP {resp.status_code}): {_api_message(resp)}")
         return resp.json().get("data") or None
 
+    def service_groups(self) -> dict[str, str]:
+        """Dienstgruppen (z. B. „Technik“): {id: Name}."""
+        data = self._get_data("servicegroups", "Dienstgruppen").get("data") or []
+        return {str(g.get("id")): (g.get("name") or "").strip() for g in data if isinstance(g, dict)}
+
     def event_files(self, event_id: int | str) -> list[dict]:
         """Dateien am Termin (Reiter „Dateien“ im Ablauf): [{id, name}]. Links ohne Datei fallen weg."""
         data = self._get_data(f"events/{event_id}", "Termin").get("data") or {}

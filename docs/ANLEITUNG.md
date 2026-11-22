@@ -163,6 +163,14 @@ Standardmäßig werden aus dem Ablaufplan nur die roten Überschriften als Kopfz
 Ablaufpunkte (rosa) kommen mit „Auch normale Ablaufpunkte (rosa) übernehmen“ (rechts) dazu – oder einzeln per
 Häkchen im Ablauf.
 
+## Technik-Notizen aus ChurchTools
+
+Notizen, die im Ablaufplan in der Spalte der Dienstgruppe **Technik** stehen, übernimmt SongBridge in die
+**Notizen des Liedes** in ProPresenter. Im Ablaufplan erscheinen sie unter dem Lied mit 🔧. Das geht nur mit
+dem Häkchen **Lieder in die Playlist-Datei packen**, denn die Notizen gehören zur Lied-Datei. Beim Import
+ersetzt ProPresenter das Lied in der Bibliothek; Lieder ohne Technik-Notiz kommen dabei mit leeren Notizen,
+so bleibt keine Notiz vom letzten Gottesdienst stehen.
+
 ## Lieder in der Playlist (Windows)
 
 Unter Windows zeigt ProPresenter die Lieder einer Playlist nur an, wenn sie in der Datei mitgeliefert

@@ -162,6 +162,14 @@ By default only the red headings of the service plan become playlist headers. No
 added with "Auch normale Ablaufpunkte (rosa) übernehmen" (also include normal agenda items) on the right, or
 individually by ticking them in the service plan.
 
+## Technik notes from ChurchTools
+
+Notes in the service plan's column for the **Technik** service group are copied into the song's **notes** in
+ProPresenter. In the service plan they appear under the song with 🔧. This only works with **Lieder in die
+Playlist-Datei packen** (pack songs into the playlist file), because the notes belong to the song file. On import
+ProPresenter replaces the song in the library; songs without a Technik note come with empty notes, so no note
+from the last service stays behind.
+
 ## Songs in the playlist (Windows)
 
 On Windows, ProPresenter only shows the songs of a playlist if they are bundled with the file. That is why

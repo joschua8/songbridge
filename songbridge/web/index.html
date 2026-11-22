@@ -1844,8 +1844,9 @@ function renderPlan() {
       }[st];
       const alts = (r.manual ? [] : (r.match.candidates || [])).slice(0, 3)
         .map(c => `<button class="linkbtn" data-alt="${i}" data-rel="${esc(c.rel)}">${esc(c.library)} / ${esc(c.name)}</button>`).join(" ");
+      const tech = r.tech_note ? `<div class="sub" title="${plSettings.embed_songs ? "Kommt in die Notizen des Liedes" : "Nur mit „Lieder in die Playlist-Datei packen“ in den Lied-Notizen"}">🔧 Technik: ${esc(r.tech_note).slice(0, 200)}${plSettings.embed_songs ? "" : ' <span class="muted">(nur mit „Lieder in die Playlist-Datei packen“)</span>'}</div>` : "";
       body = `<div class="ttl"><span>♪ ${esc(r.title)}</span>${r.song.arrangement ? `<span class="badge">${esc(r.song.arrangement)}</span>` : ""}${auto}</div>
-        ${sub ? `<div class="sub">${sub}</div>` : ""}
+        ${sub ? `<div class="sub">${sub}</div>` : ""}${tech}
         <div class="match">${chip}<button class="linkbtn" data-pick="${i}">ändern</button>
           ${alts ? `<span class="muted">auch:</span> ${alts}` : ""}</div>
         <div class="pick" id="pick-${i}" hidden><input type="text" list="pl-docs" placeholder="Bibliothek/Name suchen …" data-pickin="${i}">
@@ -2045,7 +2046,7 @@ $("#pl-start").onclick = async () => {
     const res = await fetch("/api/playlist", {method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({name: $("#pl-name").value, settings: plSettings,
         items: plan.rows.map(r => ({type: r.type, title: r.title, include: r.include, rel: r.type === "song" ? r.rel : "", media: r.media || null, auto: r.auto || "",
-          macros: r.macros || [], macro: r.macro || null}))})});
+          macros: r.macros || [], macro: r.macro || null, tech_note: r.tech_note || ""}))})});
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     const blob = await res.blob();
     const m = (res.headers.get("Content-Disposition") || "").match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)/i);

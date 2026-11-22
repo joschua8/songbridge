@@ -718,6 +718,15 @@ def ct_plan(event_id: int):
     matcher = playlist.Matcher(docs, settings.library_order)
     # Name/Beginn kommen aus der Terminliste der Oberfläche (spart eine zweite Abfrage).
     ev = {"name": request.args.get("name") or agenda.get("name") or "", "startDate": request.args.get("start") or ""}
+    # Notizen der Dienstgruppe „Technik“ (landen in den Notizen der eingepackten Lieder)
+    if any(it.get("serviceGroupNotes") for it in agenda.get("items") or []):
+        try:
+            groups = client.service_groups()
+        except (dl.ChurchToolsError, requests.RequestException) as exc:
+            groups = {}
+            notes.append(f"Dienstgruppen nicht abrufbar, Technik-Notizen fehlen: {exc}")
+        for it in agenda.get("items") or []:
+            it["_tech_note"] = playlist.tech_notes(it, groups)
     items = playlist.plan_items(agenda, matcher, settings.fuzzy)
     return jsonify({
         "agenda": {"id": agenda.get("id"), "name": agenda.get("name") or "", "isFinal": bool(agenda.get("isFinal"))},
